@@ -120,6 +120,14 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
 - Backtests stored in the same tables as forecasts, marked by a `kind` column.
 - One forecast values table per dataset, because each dataset has different
   dimension columns.
+- Send series to the model in batches of 500 as the starting size. The first
+  build checks showed batch size does not change speed or results. The final
+  size depends on the endpoint limits found in check 6.
+- Keep Timestral's two default settings: forecasts are floored at zero for a
+  series whose history has no negative value, and each forecast is averaged
+  with a mirrored second pass. See "First build checks 1 to 5", check 2.
+- Leave out and list a series that has no values at all in the chosen history
+  window. Timestral returns a flat zero forecast for it with no error.
 
 ## Open questions
 
@@ -138,9 +146,39 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
    is decided for the demo data ingest. For the running application, a Spark
    session may be slow to start. To be settled in the target environment.
 4. **Can a workbench model endpoint carry the volume?** Its request size and
-   time limits are not yet known.
+   time limits are not yet known. Known since 17 November 2026: the request
+   for 100 series of 32 steps is 29 KB of JSON text, for 500 series of 200
+   steps 892 KB, and the model takes 1.2 seconds and 21 seconds for them on 2
+   processor threads.
 5. **How is the React front end built during the AMP install?** Depends on
-   whether the Cloudera AI runtime has Node.
+   whether the Cloudera AI runtime has Node. Seen on 17 November 2026: `node`
+   and `npm` are not installed in the runtime the first checks ran in
+   (JupyterLab, Python 3.12, version 2026.08). Check 6 still has to settle it
+   for the runtime the AMP will use.
+6. **Keep the 32-step minimum history, or change it?** Decision 23 enforces 32
+   until the first build checks show what Timestral does with less. They now
+   have: it runs with any length from 1 step, and error does not change at 32.
+   What matters is how many seasonal cycles the history holds: with two or
+   more, Timestral beat the reference of repeating the last cycle; with fewer,
+   it did not. Claude's recommendation: require two seasonal cycles for
+   monthly data (24 months) and quarterly data (8 quarters), which would
+   accept the two years of monthly history in decision 19's example, and keep
+   32 for daily and weekly data. The evidence is synthetic data only, so
+   confirm on the demo data's backtest. Until Oliver decides, 32 stays
+   enforced.
+7. **Is the Hugging Face access token required, or optional?** The weights
+   downloaded with no token and no sign-in on 17 November 2026, which differs
+   from decision 20. Hugging Face printed a notice that requests without a
+   token get lower rate limits. Claude's recommendation: keep the AMP's token
+   field but make it optional.
+8. **Python 3.11 or 3.12?** `CLAUDE.md` says 3.11. The runtime the first checks
+   ran in has Python 3.12.13, and Timestral works on it. Oliver to say
+   whether a 3.11 runtime will be used or the standard changes to 3.12.
+9. **Which resource profile do the application and the workbench model get?**
+   The first checks ran in 2 vCPU and 3,933 MB. The loaded model needs about
+   1 GB, and each call adds about 0.5 GB per 1,000 series of 200 steps. Speed
+   scales with processor threads: 500 series of 200 steps took 21 seconds on
+   2 threads and 6.6 seconds on 8.
 
 ## Demo dataset comparison (17 November 2026)
 
@@ -234,13 +272,222 @@ From secondary write-ups, not confirmed against the license file itself:
   Sources: dev.to (gabrielanhaia) and byteiota.com.
 - History is read in blocks of 32 time steps. Source: marktechpost.com.
 
+Verified by running it on 17 November 2026 (see "First build checks 1 to 5"):
+NaN inside a history, speed for hundreds and thousands of series, the exact
+quantile levels, and what happens with a history shorter than 32 steps.
+
 Not yet verified by running anything:
 
-- Whether NaN inside a history works as expected.
-- Speed for hundreds or thousands of series in one call.
-- The exact quantile levels.
-- What Timestral does with a history shorter than 32 steps.
 - Whether 100 series fit in one request to a workbench model endpoint.
+- The time of one call of 5,000 series. It was timed only as batches.
+- The terms of the weights license. The download brings no license file.
+
+## First build checks 1 to 5: results (17 November 2026)
+
+Run by Claude Code on CPU, in a Cloudera AI session of this project. Check 6
+(workbench model endpoint, Node, Spark and Iceberg) has not been run.
+
+**Where it ran.** Session profile: 2 vCPU and 3,933 MB of memory. Runtime
+2026.08, Python 3.12.13, JupyterLab, Nvidia GPU edition; no GPU was used.
+Processor: Intel Xeon Platinum 8175M. The session can see 16 processor threads
+and has no hard processor cap, so torch used 8 threads by default and got
+them. Timings on 8 threads therefore depend on the host being idle. Timings on
+2 threads are what the profile guarantees.
+
+**Versions.** timestral 1.0.0 (commit `a534bdb`), torch 2.15.0 CPU build,
+numpy 2.5.5, huggingface_hub 2.4.0, safetensors 0.8.0. Weights:
+`mistralai/Timestral-209M`, snapshot `9874d25`, one file of 837 MB,
+209,312,256 parameters.
+
+**Test data.** Synthetic series made for these checks: a level, a slow trend,
+one repeating cycle and 15% random noise, never negative. No real data was
+used, so the error figures in check 5 show how error changes with history
+length, not how accurate Timestral is on retail data.
+
+### Check 1: install and forecast a small sample. Passed.
+
+- The install command in `CLAUDE.md` works. torch was installed first from
+  the CPU-only index, `https://download.pytorch.org/whl/cpu`. Installing into
+  a virtual environment on the project disk took 7 minutes and 1.1 GB.
+- pip in this runtime installs to the user's folder by default. Inside a
+  virtual environment that fails until `PIP_USER=0` is set.
+- The weights downloaded with no Hugging Face token. The first load took 13
+  seconds including the download; later loads take 2 to 4 seconds.
+- The download cache is `~/.cache/huggingface`, which is inside the project
+  folder `/home/cdsw`. It has to be kept out of git.
+- The download brings two files, `config.json` and `model.safetensors`, and
+  no license file. The timestral Python package declares Apache-2.0 for its
+  code; that says nothing about the weights.
+- 5 series of 48 steps, horizon 12: the forecast follows the cycle in the
+  history, and low is at or below the median, which is at or below high, at
+  every date.
+- The same call twice gives identical numbers. A series forecast alone and
+  inside a batch gives the same numbers (difference of 1 part in 10 million).
+  So splitting series into batches does not change any forecast.
+
+### Check 2: quantile levels and output shapes
+
+- `forecast.quantile_levels` has 21 levels: 0.01, then 0.05 to 0.95 in steps
+  of 0.05, then 0.99. The levels 0.1, 0.5 and 0.9 are among them.
+- `forecast.quantile(level)` raises `ValueError` for a level not in the list.
+  It does not interpolate between levels.
+- Output always has four dimensions: (series, variates, horizon, 21).
+
+  | Input shape | `forecast.quantiles` | `forecast.median` |
+  | --- | --- | --- |
+  | (5, 48) | (5, 1, 12, 21) | (5, 1, 12) |
+  | (48,) | (1, 1, 12, 21) | (1, 1, 12) |
+  | (2, 3, 48) | (2, 3, 12, 21) | (2, 3, 12) |
+
+- Output is a torch tensor of 32-bit floats, whatever number type goes in.
+- **Independent series must go in as (series, time).** The three-dimensional
+  form treats the variates of one series as related and forecasts them
+  together. Passing 5 unrelated series that way changed their medians by up
+  to 5.7%.
+- The model's configuration confirms what was secondary before: history is
+  read in blocks of 32 steps, the history cap is 32,768 steps, and one pass
+  produces up to 1,024 steps of horizon.
+- Two settings are on by default. `clip_nonnegative` floors the forecast at
+  zero for a series whose history has no negative value. On 200 series with
+  67% zeros, no forecast value was below zero; with the setting off, 83% of
+  the low values and 20% of the medians were below zero.
+  `symmetric_averaging` runs the model a second time on the mirrored history
+  and averages the two. Turning it off halves the time (3.4 against 6.6
+  seconds for 500 series of 200 steps). Its effect on accuracy was not
+  measured.
+
+### Check 3: NaN inside a history. Passed.
+
+- NaN anywhere in a history runs and gives finite forecasts. The other series
+  in the same call are not affected at all.
+- How far the median forecast moved from the forecast on the complete
+  history, for one series of 64 steps:
+
+  | Missing values | Median moved by |
+  | --- | --- |
+  | 1 value | 0.5% |
+  | 6 in a row | 2.4% |
+  | 25% of values, scattered | 1.7% |
+  | The first 10 | 2.0% |
+  | The last 3 | 2.0% |
+  | The last 32 | 2.9% |
+  | All but one | 31% |
+
+- NaN is much better than zero. On 200 series of 96 steps with values removed
+  at random, marking them NaN moved the median by 1.0%, 2.6% and 5.8% for 5%,
+  20% and 50% removed. Filling them with zero moved it by 2.6%, 10.3% and
+  70.8%.
+- An infinite value is treated as missing, the same as NaN.
+- **A series that is all NaN does not fail.** It returns zero for every date
+  and every quantile, with no error or warning. The application has to catch
+  such a series itself.
+- A history of zero steps raises an error.
+
+### Check 4: timing
+
+Wall-clock seconds for one `forecast` call with default settings, median of 2
+to 5 runs, model already loaded.
+
+| Series × steps | Horizon | Threads | Seconds |
+| --- | --- | --- | --- |
+| 1 × 32 | 12 | 8 | 0.06 |
+| 100 × 32 | 12 | 8 | 0.45 |
+| 100 × 32 | 12 | 2 | 1.17 |
+| 100 × 32 | 52 | 8 | 0.63 |
+| 100 × 200 | 12 | 8 | 1.21 |
+| 500 × 200 | 12 | 1 | 39.1 |
+| 500 × 200 | 12 | 2 | 20.9 |
+| 500 × 200 | 12 | 4 | 11.5 |
+| 500 × 200 | 12 | 8 | 6.6 |
+| 500 × 200 | 12 | 16 | 7.8 |
+| 500 × 200 | 52 | 8 | 8.0 |
+| 500 × 200 | 365 | 8 | 17.0 |
+| 500 × 730 | 30 | 8 | 24.9 |
+| 1,000 × 200 | 12 | 8 | 13.4 |
+| 2,000 × 200 | 12 | 8 | 36.1 |
+| 5,000 × 200, as 50 calls of 100 | 12 | 8 | 63.9 |
+| 5,000 × 200, as 10 calls of 500 | 12 | 8 | 66.7 |
+| 5,000 × 200, as 5 calls of 1,000 | 12 | 8 | 69.1 |
+
+- **5,000 series in one call was not run.** It does not fit in this session's
+  memory. The container held 1.5 GB with the model loaded (about 1 GB for the
+  model, the rest other programs in the session), and peaked at 1.85, 2.09
+  and 2.56 GB during calls of 500, 1,000 and 2,000 series. That is about 0.5
+  GB more per 1,000 series, which puts 5,000 series at about 4.0 GB against a
+  limit of 3.93 GB.
+- Batch size does not change speed between 100 and 1,000 series per call:
+  about 13 milliseconds per series of 200 steps on 8 threads. At 2,000 per
+  call it was slower, 18 milliseconds per series.
+- On 2 threads it is about 42 milliseconds per series of 200 steps. By that
+  rate 5,000 series would take about 3.5 minutes. This is a projection, not a
+  measurement.
+- Time grows with history length and with horizon: 730 steps of history took
+  about 4 times as long as 200, and a horizon of 365 about 2.5 times as long
+  as a horizon of 12.
+- This replaces the estimate in decision 9 (about one minute for 500 series
+  run one at a time): 500 series of 200 steps in one call took 6.6 seconds on
+  8 threads and 20.9 seconds on 2.
+- Size of a request written as JSON text, values rounded to 4 decimals: 29 KB
+  for 100 × 32, 892 KB for 500 × 200, 8.9 MB for 5,000 × 200.
+
+### Check 5: history shorter than 32 steps
+
+- **It runs with any history from 1 step up**, with no error and no warning.
+  A history that is not a multiple of 32 steps is padded at the start, and
+  the padding is marked as missing.
+- Backtest error by history length. Each block is 300 synthetic series, one
+  cutoff, and the same actuals in every row. WAPE is the sum of absolute
+  errors divided by the sum of actuals. The noise in the data puts the lowest
+  reachable WAPE near 0.12.
+
+  | History (steps) | Monthly-like: cycle 12, horizon 12 | Daily-like: cycle 7, horizon 28 | Weekly-like: cycle 52, horizon 13 |
+  | --- | --- | --- | --- |
+  | 4 | 0.337 | 0.387 | |
+  | 8 | 0.278 | 0.245 | |
+  | 12 | 0.240 | | |
+  | 14 | | 0.186 | |
+  | 16 | 0.187 | | 0.254 |
+  | 21 | | 0.147 | |
+  | 24 | 0.144 | | |
+  | 31 | 0.138 | 0.141 | 0.256 |
+  | 32 | 0.138 | 0.141 | 0.248 |
+  | 33 | 0.137 | 0.140 | |
+  | 52 | | | 0.183 |
+  | 64 | 0.128 | 0.134 | 0.158 |
+  | 104 | | | 0.133 |
+  | 128 | 0.125 | 0.132 | |
+  | 256 | 0.122 | 0.127 | |
+  | 400 | | | 0.123 |
+  | Reference: repeat the last cycle | 0.164 | 0.172 | 0.178 |
+
+- **Nothing changes at 32 steps.** Histories of 31, 32 and 33 steps give the
+  same error.
+- Error follows the number of cycles in the history. With about two cycles or
+  more, Timestral beat the reference (monthly-like with 24 steps: 0.144
+  against 0.164). With one cycle it was worse than the reference
+  (monthly-like with 12 steps: 0.240). With less than one cycle the reference
+  cannot be computed at all.
+- So 32 steps is too strict for monthly data and too loose for weekly data
+  with a yearly cycle, where 32 weeks gave 0.248, nearly twice the error of 104
+  weeks.
+- Share of actuals that fell between low and high, expected to be 0.80: from
+  0.76 to 0.96 for histories of 2 steps or more. With 1 step the range
+  collapses and the share was 0.09.
+- 32 is therefore not a requirement of the model. Decision 23 stays in force
+  until Oliver decides; see open question 6.
+
+### Notes for later Claude Code sessions in this environment
+
+- `free` reports the host's 61 GB. The session's real limit is in
+  `/sys/fs/cgroup/memory.max` and in the variable `CDSW_MEMORY_MB`.
+- `/tmp` is held in memory, counts against that limit, and is emptied when
+  the session restarts. Keep work files on the project disk.
+- The first two runs of these checks ended the session. The likely cause is
+  memory: the virtual environment was in `/tmp` and the script included the
+  single call of 5,000 series. No log survived to confirm it. The runs
+  recorded here kept the container under 2.6 GB.
+- The throwaway script and its raw output are in `/home/cdsw/.timestral-checks`,
+  which is not in git. Every number from them is in this section.
 
 ## What the old code did (reference only)
 
@@ -273,4 +520,29 @@ Things not to repeat:
 
 ## Changes made during implementation
 
-Claude Code adds dated lines here. None yet.
+Claude Code adds dated lines here.
+
+- 17 November 2026. Ran first build checks 1 to 5. Results are in "First
+  build checks 1 to 5: results". Check 6 has not been run. No code was
+  written and no decision was changed.
+- 17 November 2026. The speed estimate in decision 9 is replaced by
+  measurements (check 4). Why: the estimate assumed one series per call;
+  many series per call is much faster.
+- 17 November 2026. Check 5 answered what decision 23 was waiting for: 32
+  steps is not a requirement of Timestral. The minimum is unchanged. Added
+  open question 6 for Oliver to decide.
+- 17 November 2026. Added open questions 7 (the Hugging Face token was not
+  needed for the download), 8 (the runtime has Python 3.12, not 3.11) and 9
+  (which resource profile to use). Why: each differs from, or is missing
+  from, what `CLAUDE.md` assumes.
+- 17 November 2026. Added three proposals to "Proposed by Claude": batches of
+  500 series, keeping Timestral's two default settings, and leaving out a
+  series with no values in its history window. Why: checks 2, 3 and 4 showed
+  the model's behavior that each one responds to.
+- 17 November 2026. Recorded that independent series must be passed to
+  Timestral as a two-dimensional array (check 2). Why: the three-dimensional
+  form forecasts them jointly and changes the numbers.
+- 17 November 2026. One call of 5,000 series (part of check 4) was not run,
+  because it does not fit in the session's 3,933 MB. It was timed as batches
+  instead.
+
