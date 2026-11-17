@@ -102,6 +102,11 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
     example 100 series of 32 steps. The pipeline needs a way to select the
     slice. Oliver left the way to Claude.
 
+26. **The repo's code is licensed under Apache 2.0.** The `LICENSE` file is
+    the standard Apache 2.0 text, unchanged. It lets anyone use, change and
+    share the code. It does not cover the Timestral weights, which have
+    Mistral's own license (decision 12).
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -118,10 +123,11 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
 
 ## Open questions
 
-1. **Which license does this repo's code use?** An open-source repo needs a
-   license file that says what other people may do with the code. Without one,
-   nobody else may legally reuse it. Claude suggests Apache 2.0. Oliver to
-   confirm, and to check whether Cloudera has a rule for this.
+1. **Who is named as the copyright owner?** Apache 2.0 asks for a short
+   notice at the top of source files that names the owner: Oliver, or
+   Cloudera. Not set yet. Oliver to check whether Cloudera has a rule for
+   work published by an employee. Until then, do not add copyright notices
+   to source files.
 2. **Which demo dataset, and which cut of it?** Iowa liquor sales is the
    working choice (decision 18), with a 1 to 5 GB cap. The old backend repo
    `Rev-Analytics/u4cast-base` has a weekly extract at
