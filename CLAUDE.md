@@ -12,8 +12,9 @@ only. Do not copy code from it. See `docs/decisions.md` for what the old app did
 
 - Owner: Oliver Zarate
 - First demo: 27 November 2026
-- Demo data: a retail dataset with many series. Iowa liquor sales is the
-  working choice, not a final one.
+- Demo data: Iowa liquor sales, 2022 through the latest month. Details and
+  download addresses are in `docs/decisions.md` under "Demo dataset
+  comparison".
 - Purpose of the demo: show Cloudera AI plus Timestral as a demand forecasting
   solution, and give Oliver exposure as its creator
 
@@ -118,7 +119,7 @@ are in this file, which loads with this one:
 - Minimum history per series, enforced, depends on the frequency: 24 time
   steps for monthly data, 8 for quarterly and 104 for weekly (two years in
   each case), and 32 for daily. The user can override the weekly minimum down
-  to 32. A series with less is left out and listed for the user. Decision 27
+  to 32. A series with less is left out and listed for the user. Decision 28
   in `docs/decisions.md` gives the reasons.
 - The user can choose the history window, meaning the first and last date of
   history a forecast uses. The default is all of it.
@@ -214,6 +215,8 @@ tables. The application never writes to a history table.
   license; each user is responsible for checking and complying with it; and
   this project is a reference example, not something Cloudera runs in
   production.
+- The README must also credit the State of Iowa, Department of Revenue, as
+  the source of the demo data. Its license, CC BY 4.0, requires that.
 
 ## Engineering standards
 

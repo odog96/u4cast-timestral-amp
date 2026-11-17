@@ -85,7 +85,7 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
     the user can choose; keeping every reissue of a forecast; a view of
     several forecasts' predictions for the same date next to what happened.
 
-23. **Minimum history is 32 time steps, enforced.** (Replaced by decision 27.)
+23. **Minimum history is 32 time steps, enforced.** (Replaced by decision 28.)
     Oliver: "if Timestral
     requires 32 steps, then that is what we enforce - full stop." What is
     known: Timestral's README states no minimum, and a secondary source
@@ -108,14 +108,19 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
     share the code. It does not cover the Timestral weights, which have
     Mistral's own license (decision 12).
 
-Decisions 27 to 30 were made by Oliver on 17 November 2026 in a Claude Code
+27. **Demo data is Iowa liquor sales, 2022 through the latest month.** Oliver
+    confirmed after Claude's comparison of candidates. This settles decision
+    18. The README must credit the State of Iowa, Department of Revenue.
+
+Decisions 28 to 31 were made by Oliver on 17 November 2026 in a Claude Code
 session, after reading the results of first build checks 1 to 5.
 
-27. **Minimum history depends on the frequency, and the user can override
+28. **Minimum history depends on the frequency, and the user can override
     it.** This replaces decision 23. Oliver: "min of 2 cycles and a min of 32
     observations, but let them override (they know their business better than
     anyone so an override should let them use 32". The message was cut off
-    there, so the table below is Claude's reading of it; see open question 6.
+    there, so the table below is Claude's reading of it. Oliver confirmed it in
+    decision 32.
 
     | Frequency | Default minimum | With the user's override |
     | --- | --- | --- |
@@ -129,30 +134,30 @@ session, after reading the results of first build checks 1 to 5.
     Two years of monthly history, as in decision 19's example, is now
     accepted. The override exists because the user knows whether their weekly
     data has a yearly pattern worth waiting two years for.
-28. **The Hugging Face access token is optional.** This changes decision 20.
+29. **The Hugging Face access token is optional.** This changes decision 20.
     Reason: the weights downloaded with no sign-in. The AMP keeps the field
     because Hugging Face gives lower rate limits to requests without a token.
-29. **Python 3.12.** `CLAUDE.md` said 3.11. Reason: the Cloudera AI runtime in
+30. **Python 3.12.** `CLAUDE.md` said 3.11. Reason: the Cloudera AI runtime in
     use has 3.12, and Timestral works on it.
-30. **Resource profile: 4 vCPU and 8 GB of memory, for the application and for
+31. **Resource profile: 4 vCPU and 8 GB of memory, for the application and for
     the workbench model.** Oliver asked whether that is plenty and asked
     Claude to recommend. Claude's answer: yes. The loaded model needs about 1
     GB and stays under 3 GB with batches of 500 series, and 500 series of 200
     steps took 11.5 seconds on 4 threads. To be looked at again if the
     application runs Spark in the same container.
 
-Decisions 31 to 33 were made by Oliver on 17 November 2026 in the same Claude
+Decisions 32 to 34 were made by Oliver on 17 November 2026 in the same Claude
 Code session, after the forecasting package was built.
 
-31. **The table in decision 27 is confirmed.** Weekly data needs 104 steps by
+32. **The table in decision 28 is confirmed.** Weekly data needs 104 steps by
     default, and the user's override can lower that to 32. The override
     applies to weekly data only.
-32. **The demo ingest writes weekly totals per store and item.** The
+33. **The demo ingest writes weekly totals per store and item.** The
     application does not change the frequency of a dataset in version one:
     the rows of a dataset must already be daily, weekly, monthly or
     quarterly. Reason: Iowa liquor sales is one row per order line, and the
     forecasting package works on a regular frequency.
-33. **The default history window stays all of the history, and the interface
+34. **The default history window stays all of the history, and the interface
     shows how many series each choice of start date keeps.** Reason: with
     series that start at different dates, the default leaves out every
     series that starts later than the earliest one. The user moves the start
@@ -221,12 +226,9 @@ November 2026. Each is a small, separate piece of code and easy to change.
    Cloudera. Not set yet. Oliver to check whether Cloudera has a rule for
    work published by an employee. Until then, do not add copyright notices
    to source files.
-2. **Which demo dataset, and which cut of it?** Claude compared candidates on
-   17 November 2026 and recommends staying with Iowa liquor sales. Oliver has
-   not confirmed. See "Demo dataset comparison" below. Proposed cut: the
-   yearly datasets from 2022 through the latest month. Not yet known: how many
-   stores and items the data has, the size of the CSV files, and whether the
-   Cloudera AI environment can reach the download address.
+2. **Three unknowns about the Iowa data** (decision 27): how many stores and
+   items it has, the size of the CSV files, and whether the Cloudera AI
+   environment can reach the download address. The ingest will answer them.
 3. **How does the running application read and write Iceberg tables?** Spark
    is decided for the demo data ingest. For the running application, a Spark
    session may be slow to start. To be settled in the target environment.
@@ -240,7 +242,7 @@ November 2026. Each is a small, separate piece of code and easy to change.
    and `npm` are not installed in the runtime the first checks ran in
    (JupyterLab, Python 3.12, version 2026.08). Check 6 still has to settle it
    for the runtime the AMP will use.
-6. **Do the minimum history figures of decision 27 hold on real data?** They
+6. **Do the minimum history figures of decision 28 hold on real data?** They
    rest on synthetic data only. To be checked against the demo data's
    backtest once the demo data is ingested.
 7. **How many series does the equal-length rule leave out on the demo data?**
@@ -258,7 +260,7 @@ FreshRetailNet-50K and the UCI page for Online Retail II. Not read: the list
 of datasets in the TIME benchmark, and the Kaggle rules for Favorita,
 Rossmann and Walmart.
 
-- **Iowa liquor sales (recommended).** Orders of spirits by Iowa stores, by
+- **Iowa liquor sales (chosen, decision 27).** Orders of spirits by Iowa stores, by
   product and date, from January 2012, updated monthly. License: CC BY 4.0,
   which allows any use, including commercial, if the source is credited.
   About 2.4 to 2.6 million rows per year (2018: 2,355,558; 2022: 2,564,565;
@@ -284,10 +286,9 @@ Rossmann and Walmart.
   4.0; an R package that bundles it says non-commercial use only. Too small
   for the Spark ingest to mean anything.
 
-Two things follow if Iowa is confirmed. The README must credit the State of
-Iowa, Department of Revenue, as CC BY 4.0 requires. And because Mistral does
-not name the real data Timestral was trained on, overlap with any public
-dataset cannot be ruled out; say so if the demo reports accuracy.
+Because Mistral does not name the real data Timestral was trained on,
+overlap with any public dataset cannot be ruled out. Say so if the demo
+reports accuracy.
 
 ## Deferred items
 
@@ -615,13 +616,13 @@ Claude Code adds dated lines here.
   because it does not fit in the session's 3,933 MB. It was timed as batches
   instead.
 - 17 November 2026. Oliver answered the open questions that were numbered 6
-  to 9. They are now decisions 27 to 30 and were removed from "Open
+  to 9. They are now decisions 28 to 31 and were removed from "Open
   questions". `CLAUDE.md` was changed to match: the minimum history rule, the
   optional Hugging Face token, Python 3.12, and the resource profile.
 - 17 November 2026. Decision 23 (32 steps for every frequency) is replaced by
-  decision 27. Why: check 5 showed 32 is not a requirement of the model.
+  decision 28. Why: check 5 showed 32 is not a requirement of the model.
 - 17 November 2026. Added a new open question 6. Why: Oliver's message on the
-  minimum history was cut off, and two points of decision 27 are Claude's
+  minimum history was cut off, and two points of decision 28 are Claude's
   reading of it.
 - 17 November 2026. Built the forecasting package `u4cast` under `src/` with
   its tests: frequency detection and the date grid, data preparation,
@@ -645,11 +646,16 @@ Claude Code adds dated lines here.
 - 17 November 2026. Added `.gitignore`. Why: in a Cloudera AI session the
   project folder is also the home folder, so the weights cache, tool
   settings and sign-in files sit next to the code.
-- 17 November 2026. Oliver confirmed Claude's reading of decision 27 and
-  accepted two recommendations. They are decisions 31 to 33. The open
+- 17 November 2026. Oliver confirmed Claude's reading of decision 28 and
+  accepted two recommendations. They are decisions 32 to 34. The open
   questions that were numbered 6, 7 and 8 are replaced by two checks to run
   on the demo data. `CLAUDE.md` was changed to match.
 - 17 November 2026. Oliver gave the go-ahead to run first build check 6,
   which deploys a model in his Cloudera AI workspace, and to merge the work
   so far into `main` and push it to GitHub.
+- 17 November 2026. Merged a commit the planning conversation had pushed to
+  GitHub before this session started: Iowa liquor sales is confirmed as the
+  demo data. That commit's decision 27 keeps its number. The decisions this
+  session had recorded as 27 to 33 are now 28 to 34, here and in
+  `CLAUDE.md`. Commit messages written before the merge use the old numbers.
 

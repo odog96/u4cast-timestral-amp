@@ -33,7 +33,7 @@ SEASON_LENGTH: dict[Frequency, int] = {
     Frequency.QUARTERLY: 4,
 }
 
-# Decision 27 in docs/decisions.md: two years for monthly, quarterly and
+# Decision 28 in docs/decisions.md: two years for monthly, quarterly and
 # weekly data, 32 steps for daily data.
 DEFAULT_MINIMUM_HISTORY: dict[Frequency, int] = {
     Frequency.DAILY: 32,
