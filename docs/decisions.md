@@ -242,6 +242,20 @@ The following come from first build check 6 on 17 November 2026.
 - **One replica of the model.** Requests are sent one after the other. When
   the model says it is busy, the caller waits and tries again, up to twice.
 
+The following were chosen while building the storage layer and the ingest on
+17 November 2026.
+
+- **One database holds everything the application writes.** Its name is the
+  setting `U4CAST_DATABASE`, `u4cast` by default. In it: `forecasts`,
+  `datasets`, and one `forecast_values_<dataset>` table per dataset.
+- **A forecast values table has all the dimension columns of its dataset, as
+  text.** A forecast summed up to fewer columns leaves the others empty.
+- **A forecast's values are written before its row in the forecasts table,**
+  so a forecast that is listed always has its values.
+- **An uploaded CSV becomes a new table.** The application refuses a table
+  name that exists, so it never changes history that is already there.
+- **Spark is capped at 8 workers, 2 GB for the driver and 2 GB per worker.**
+
 ## Open questions
 
 1. **Who is named as the copyright owner?** Apache 2.0 asks for a short
@@ -249,10 +263,8 @@ The following come from first build check 6 on 17 November 2026.
    Cloudera. Not set yet. Oliver to check whether Cloudera has a rule for
    work published by an employee. Until then, do not add copyright notices
    to source files.
-2. **Two unknowns about the Iowa data** (decision 27): how many stores and
-   items it has, and its measured size. The ingest will answer them. Known
-   since check 6: the Cloudera AI environment can reach the download
-   addresses, and the size is estimated at 2.6 GB for 2022 through 2026.
+2. **Unknowns about the Iowa data.** Answered by the ingest: 2,705 stores,
+   9,440 items, 2.83 GB. See "Storage layer and demo data: results".
 3. **How does the running application read and write Iceberg tables?**
    Answered by check 6, as a proposal: with one Spark session that the
    application starts once and keeps. See "Proposed by Claude".
@@ -264,14 +276,26 @@ The following come from first build check 6 on 17 November 2026.
 5. **How is the React front end built during the AMP install?** Answered by
    check 6, as a proposal: the runtime has no Node, so an install step
    installs it through pip and then builds. See "Proposed by Claude".
-6. **Do the minimum history figures of decision 28 hold on real data?** They
-   rest on synthetic data only. To be checked against the demo data's
-   backtest once the demo data is ingested.
-7. **How many series does the equal-length rule leave out on the demo data?**
-   A series is kept only if it has a value on the first and on the last date
-   of the history window. On weekly store-by-item data many series may fail
-   that. To be measured once the demo data is ingested, before the interface
-   is built.
+6. **Do the minimum history figures of decision 28 hold on real data?**
+   Answered: yes, they can stand. See "Storage layer and demo data: results".
+7. **What does a date with no row mean, and must a series cover the whole
+   window?** Measured on the demo data: the current rules keep 29% of stores
+   and 0.2% of store-by-item series, because in order data a week with no
+   row means nothing was ordered, not that the value is unknown. Claude's
+   recommendation, which changes decision 8 and one item of "Things not to
+   repeat", so it is not built:
+   - When a dataset is added, the user says what a date with no row means:
+     zero, for sales and orders, or missing, for measurements. Iowa is zero.
+   - For a zero dataset, a series is zero from its first row to the end of
+     the window and missing before its first row, and it is kept if that
+     stretch is at least the minimum history. Series then have different
+     lengths in one forecast. Timestral takes that: check 3 showed missing
+     values at the start of a history are accepted.
+   - For a missing dataset, nothing changes.
+8. **Add pyarrow to speed up loading slices?** Moving rows from Spark to
+   pandas takes most of the 4 to 14 seconds a slice needs. pyarrow is the
+   standard way to speed that up and is not in the runtime. Claude's
+   recommendation: add it as a dependency and measure.
 
 ## Demo dataset comparison (17 November 2026)
 
@@ -738,6 +762,106 @@ Read on 17 November 2026 from docs.cloudera.com (Cloudera AI, public cloud).
   year is about 0.55 GB and 2022 through 2026 about 2.6 GB, inside the cap of
   1 to 5 GB. This is an estimate from one sample, not a measurement.
 
+## Storage layer and demo data: results (17 November 2026)
+
+### The demo data is ingested
+
+`ingest/ingest_iowa.py` downloaded Iowa liquor sales for 2022 through 2026,
+summed it with Spark and wrote the Iceberg table `u4cast.iowa_liquor_weekly`.
+This answers open question 2.
+
+- Download: 24 CSV files, 2.83 GB, in about one minute.
+- The table: 12,122,021 rows, one per week, store and item. 252 weeks, from
+  the week of 3 January 2022 to the week of 26 October 2026. 2,705 stores,
+  9,440 items, 49 categories, 99 counties, 1,417,157 pairs of store and item.
+- Columns: `week`, `county`, `city`, `store`, `category`, `vendor`, `item`,
+  and three measures, `bottles`, `dollars` and `liters`.
+- A week starts on Monday. The first and the last week were dropped because
+  the data covers them only in part. A store or item carries the name, place,
+  category and vendor of its most recent order, and its number in brackets,
+  so a renamed store stays one series and two stores never share a label.
+- The ingest took 5.5 minutes in a 2 vCPU session.
+- The dataset is saved in the datasets table as "Iowa liquor sales", with
+  `bottles` as the target.
+- The downloaded files stay in `data/iowa` on the project disk, which git
+  ignores, so a second run does not download them again.
+
+### Spark needed two settings
+
+- **A cap on workers.** The first ingest failed. Cloudera AI's default lets
+  one job ask for up to 249 Spark workers; this job asked for 89, the
+  cluster added machines, and workers then disappeared after two to five
+  minutes until Spark gave up. With a cap of 8 workers the ingest finished.
+  Two workers were still lost in that run, and Spark recovered. The cause of
+  the losses was not found.
+- **A cap on memory.** Cloudera AI's default gives Spark's driver 3,051 MB of
+  a 3,933 MB container. The project sets 2 GB.
+- Both are applied in `u4cast.storage.spark_session` and can be changed with
+  environment variables.
+
+### The storage layer works against real Spark and Iceberg
+
+- `u4cast.storage.Store` creates the tables, saves datasets, loads a slice
+  with the filter, the summing and the history window done in the query, and
+  appends forecasts. Eight tests run it against a scratch database in this
+  workspace and all pass. They are skipped unless `U4CAST_TEST_SPARK=1`.
+- Loading a slice takes 4 to 14 seconds: 12 seconds for 352,164 rows (all
+  stores) and 14 for 651,559 rows (all items). Most of that is moving rows
+  from Spark to pandas.
+- Memory in the 3.9 GB session peaked at 2.9 GB while Spark, a slice of
+  780,000 rows and Claude Code were all in it.
+
+### Open question 7: the equal-length rule leaves out most fine-grained series
+
+All 252 weeks of history, each row a different way of summing the data up:
+
+| Summed up to | Series | Kept | Share kept | Share of bottles kept |
+| --- | --- | --- | --- | --- |
+| Category | 50 | 44 | 88% | 99.7% |
+| County | 100 | 98 | 98% | 99.9% |
+| Vendor | 357 | 83 | 23% | 98.6% |
+| County by category | 4,744 | 2,458 | 52% | 97.9% |
+| Store | 2,705 | 785 | 29% | 67.9% |
+| Item | 9,440 | 1,331 | 14% | 78.3% |
+| Store by category, Polk county | 12,690 | 1,411 | 11% | 64.1% |
+| Store by item, city of Ames | 33,894 | 75 | 0.2% | 2.7% |
+
+- Every series left out was left out for the same reason: it has no row in
+  the first week or in the last week of the window.
+- Moving the start date helps little. At store level, starting in January
+  2026 instead of January 2022 keeps 1,171 stores instead of 785.
+- The cause is what a missing row means. In order data, a week with no row
+  is a week in which nothing was ordered. The current rules read it as
+  unknown, and then require a known value at both ends of the window.
+- Coarse levels work today: county by category gives 2,458 series, which is
+  enough to demonstrate volume. Store by item, the level of decision 19's
+  example of 100 SKUs, does not work with the current rules.
+- This is now open question 7, with a recommendation.
+
+### Open question 6: the minimum history figures on real data
+
+Backtest on the Iowa data with the real model through the endpoint. Horizon
+13 weeks, four cutoffs 13 weeks apart, the last on 27 July 2026. Each row
+gave the model only that many weeks of history. The figures are WAPE.
+
+| Weeks of history | Category, 44 series | County by category, 1,000 series | Store, 785 series |
+| --- | --- | --- | --- |
+| 32 | 0.140 | 0.308 | 0.338 |
+| 52 | 0.136 | 0.299 | 0.332 |
+| 78 | 0.138 | 0.297 | 0.331 |
+| 104 | 0.129 | 0.290 | 0.321 |
+| 156 | 0.116 | 0.283 | 0.310 |
+| Reference: repeat the value of a year earlier | 0.321 | 0.518 | 0.544 |
+
+- More history helps, gradually. There is no sharp step at two years, unlike
+  on the synthetic data of check 5. With 32 weeks the error is 5% to 9%
+  higher than with 104 weeks.
+- Timestral beat the reference by a wide margin at every length.
+- Decision 28 can stand: 104 weeks by default, and the override to 32 costs
+  little accuracy on this data.
+- A caution for the demo: Mistral does not name the data Timestral was
+  trained on, so overlap with this public dataset cannot be ruled out.
+
 ## What the old code did (reference only)
 
 Three private repos were read on 17 November 2026:
@@ -856,3 +980,14 @@ Claude Code adds dated lines here.
   running workbench model `timestral` (one replica, 4 vCPU and 8 GB) and the
   project environment variable `U4CAST_MODEL_ACCESS_KEY`. Its scratch
   database was dropped.
+- 17 November 2026. Built the storage layer (`src/u4cast/storage.py`) and the
+  demo data ingest (`ingest/`), and ran the ingest. Results are in "Storage
+  layer and demo data: results". 119 tests run without Spark or the weights;
+  8 more run against real Spark and passed.
+- 17 November 2026. Answered open questions 2 and 6 from the demo data.
+  Open question 7 was measured and is now a question for Oliver, with a
+  recommendation that would change decision 8. Added open question 8 on
+  pyarrow.
+- 17 November 2026. The ingest left two things in Oliver's data lake: the
+  database `u4cast` and in it the tables `iowa_liquor_weekly`, `datasets`
+  and `forecasts`.

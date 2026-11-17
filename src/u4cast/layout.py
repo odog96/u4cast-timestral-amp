@@ -10,9 +10,12 @@ from __future__ import annotations
 import datetime as dt
 import enum
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
+
+import pandas as pd
 
 from u4cast.frequency import Frequency
 from u4cast.prepare import TS_ID
@@ -82,6 +85,27 @@ def forecast_values_columns(dimension_columns: Sequence[str]) -> tuple[str, ...]
     )
 
 
+def values_table_schema(dimension_columns: Sequence[str]) -> list[tuple[str, str]]:
+    """Return the columns of a forecast values table as (name, Spark SQL type).
+
+    Dimension columns are stored as text, whatever their type in the history.
+    """
+    forecast_values_columns(dimension_columns)  # refuses a clash of names
+    return [
+        *_VALUES_BEFORE_DIMENSIONS,
+        *((column, "string") for column in dimension_columns),
+        *_VALUES_AFTER_DIMENSIONS,
+    ]
+
+
+def forecast_values_table(dataset: str) -> str:
+    """Return the name of the forecast values table of a dataset."""
+    slug = re.sub(r"[^a-z0-9]+", "_", dataset.lower()).strip("_")
+    if not slug:
+        raise ValueError(f"The dataset name {dataset!r} has no letter or digit to name a table by.")
+    return f"forecast_values_{slug}"
+
+
 def _json_list(values: Sequence[str]) -> str:
     return json.dumps(list(values))
 
@@ -137,6 +161,25 @@ class ForecastRecord:
         }
         return {name: row[name] for name, _ in FORECASTS_TABLE}
 
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> ForecastRecord:
+        """Build the record from a row of the forecasts table."""
+        return cls(
+            forecast_id=row["forecast_id"],
+            forecast_name=row["forecast_name"],
+            dataset=row["dataset"],
+            target_column=row["target_column"],
+            dimension_columns=tuple(json.loads(row["dimension_columns"])),
+            slice_filter=json.loads(row["slice_filter"]),
+            frequency=Frequency(row["frequency"]),
+            history_start_date=pd.Timestamp(row["history_start_date"]).date(),
+            history_end_date=pd.Timestamp(row["history_end_date"]).date(),
+            horizon=int(row["horizon"]),
+            model_name=row["model_name"],
+            kind=Kind(row["kind"]),
+            created_at=pd.Timestamp(row["created_at"]).to_pydatetime(),
+        )
+
 
 @dataclass(frozen=True)
 class DatasetRecord:
@@ -160,3 +203,15 @@ class DatasetRecord:
             "frequency": self.frequency.value,
         }
         return {name: row[name] for name, _ in DATASETS_TABLE}
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> DatasetRecord:
+        """Build the record from a row of the datasets table."""
+        return cls(
+            dataset=row["dataset"],
+            source_table=row["source_table"],
+            date_column=row["date_column"],
+            target_column=row["target_column"],
+            dimension_columns=tuple(json.loads(row["dimension_columns"])),
+            frequency=Frequency(row["frequency"]),
+        )

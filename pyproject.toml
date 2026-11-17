@@ -45,6 +45,7 @@ explicit = true
 testpaths = ["tests"]
 markers = [
     "weights: runs the real Timestral model; needs the model extra and downloaded weights",
+    "spark: runs against real Spark and Iceberg; needs Cloudera AI",
 ]
 
 [tool.ruff]
