@@ -128,14 +128,12 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
    Cloudera. Not set yet. Oliver to check whether Cloudera has a rule for
    work published by an employee. Until then, do not add copyright notices
    to source files.
-2. **Which demo dataset, and which cut of it?** Iowa liquor sales is the
-   working choice (decision 18), with a 1 to 5 GB cap. The old backend repo
-   `Rev-Analytics/u4cast-base` has a weekly extract at
-   `test_folder/iowa_liquors.csv`: 112 stores, 214 weeks, 21,192 rows
-   (measured). The State of Iowa publishes the full data at item level, which
-   could give thousands of series; that is from Claude's own knowledge and not
-   checked. Also to check: the data's license terms, since a public AMP would
-   download or bundle it.
+2. **Which demo dataset, and which cut of it?** Claude compared candidates on
+   17 November 2026 and recommends staying with Iowa liquor sales. Oliver has
+   not confirmed. See "Demo dataset comparison" below. Proposed cut: the
+   yearly datasets from 2022 through the latest month. Not yet known: how many
+   stores and items the data has, the size of the CSV files, and whether the
+   Cloudera AI environment can reach the download address.
 3. **How does the running application read and write Iceberg tables?** Spark
    is decided for the demo data ingest. For the running application, a Spark
    session may be slow to start. To be settled in the target environment.
@@ -143,6 +141,46 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
    time limits are not yet known.
 5. **How is the React front end built during the AMP install?** Depends on
    whether the Cloudera AI runtime has Node.
+
+## Demo dataset comparison (17 November 2026)
+
+What was read: the Iowa Data Hub and data.gov catalog pages, the Kaggle rules
+page for the M5 competition, the fev-bench paper's task table, GIFT-Eval
+dataset tables quoted in other papers, the Hugging Face page for
+FreshRetailNet-50K and the UCI page for Online Retail II. Not read: the list
+of datasets in the TIME benchmark, and the Kaggle rules for Favorita,
+Rossmann and Walmart.
+
+- **Iowa liquor sales (recommended).** Orders of spirits by Iowa stores, by
+  product and date, from January 2012, updated monthly. License: CC BY 4.0,
+  which allows any use, including commercial, if the source is credited.
+  About 2.4 to 2.6 million rows per year (2018: 2,355,558; 2022: 2,564,565;
+  2024: 2,590,975; 2025: 2,490,620; 2026 through August: 1,604,208). A January
+  2023 copy of the full table had 31,339,341 rows and 24 columns. Not in the
+  retail tasks of fev-bench or the sales datasets of GIFT-Eval.
+  Download: `https://idh-be.iowa.gov/api/v1/datasets/<id>/rows.csv`, with id
+  1259 for 2022, 1261 for 2024, 1262 for 2025 and 1263 for 2026. The id for
+  2023 was not confirmed.
+  Size estimate, not a measurement: an older description gives 800 MB for 3
+  million rows, so about 0.7 GB per year and about 3 GB for 2022 through 2026.
+- **M5 (Walmart).** 30,490 item-by-store daily series over 1,941 days. Ruled
+  out: the Kaggle rules allow non-commercial use only, and it is one of the
+  fev-bench tasks Timestral reports scores on.
+- **Favorita, Rossmann, Walmart store sales, Rohlik.** All are fev-bench
+  tasks, so a demo on them repeats the benchmark. Their license terms were
+  not checked.
+- **FreshRetailNet-50K.** 50,000 store-by-product series from a Chinese fresh
+  grocery retailer, CC BY 4.0. Only 90 days of history and the sales values
+  are normalized, so it cannot show yearly patterns or monthly reissues.
+- **UCI Online Retail II.** 1,067,371 transaction rows from a UK gift
+  retailer, December 2009 to December 2011, 43.5 MB. The UCI page says CC BY
+  4.0; an R package that bundles it says non-commercial use only. Too small
+  for the Spark ingest to mean anything.
+
+Two things follow if Iowa is confirmed. The README must credit the State of
+Iowa, Department of Revenue, as CC BY 4.0 requires. And because Mistral does
+not name the real data Timestral was trained on, overlap with any public
+dataset cannot be ruled out; say so if the demo reports accuracy.
 
 ## Deferred items
 
