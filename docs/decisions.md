@@ -219,6 +219,29 @@ November 2026. Each is a small, separate piece of code and easy to change.
   optional extra called `model`, so the tests install and run without them.
   torch comes from the CPU-only index.
 
+The following come from first build check 6 on 17 November 2026.
+
+- **The application reads and writes Iceberg tables through one Spark
+  session,** taken from the project's Spark data connection, started when
+  the application starts and kept open. Reason: starting a session takes 20
+  seconds and the first query another 38, but a query on a warm session takes
+  1 to 4 seconds. The name of the data connection is a setting.
+- **The AMP installs Node through pip** (`nodejs-wheel`) and builds the React
+  front end in an install step.
+- **The workbench model keeps authentication on.** The application sends its
+  Cloudera AI API key with each request. Reason: an endpoint with no check
+  on who is calling is one of the things not to repeat from the old code.
+- **The model image uses the runtime's own numpy and pandas** and adds only
+  torch, Timestral and this project. Reason: replacing packages the runtime
+  itself runs on is a risk with no benefit.
+- **A request to the endpoint holds at most 2,000 series-blocks,** meaning
+  series multiplied by the blocks of 32 steps in history and horizon, and at
+  most 500 series. That is about 5 seconds of model time on 4 vCPU, a sixth
+  of the 30-second limit. This replaces a fixed batch of 500 series for the
+  endpoint. Reason: a request that reaches the limit blocks the replica.
+- **One replica of the model.** Requests are sent one after the other. When
+  the model says it is busy, the caller waits and tries again, up to twice.
+
 ## Open questions
 
 1. **Who is named as the copyright owner?** Apache 2.0 asks for a short
@@ -226,22 +249,21 @@ November 2026. Each is a small, separate piece of code and easy to change.
    Cloudera. Not set yet. Oliver to check whether Cloudera has a rule for
    work published by an employee. Until then, do not add copyright notices
    to source files.
-2. **Three unknowns about the Iowa data** (decision 27): how many stores and
-   items it has, the size of the CSV files, and whether the Cloudera AI
-   environment can reach the download address. The ingest will answer them.
-3. **How does the running application read and write Iceberg tables?** Spark
-   is decided for the demo data ingest. For the running application, a Spark
-   session may be slow to start. To be settled in the target environment.
-4. **Can a workbench model endpoint carry the volume?** Its request size and
-   time limits are not yet known. Known since 17 November 2026: the request
-   for 100 series of 32 steps is 29 KB of JSON text, for 500 series of 200
-   steps 892 KB, and the model takes 1.2 seconds and 21 seconds for them on 2
-   processor threads.
-5. **How is the React front end built during the AMP install?** Depends on
-   whether the Cloudera AI runtime has Node. Seen on 17 November 2026: `node`
-   and `npm` are not installed in the runtime the first checks ran in
-   (JupyterLab, Python 3.12, version 2026.08). Check 6 still has to settle it
-   for the runtime the AMP will use.
+2. **Two unknowns about the Iowa data** (decision 27): how many stores and
+   items it has, and its measured size. The ingest will answer them. Known
+   since check 6: the Cloudera AI environment can reach the download
+   addresses, and the size is estimated at 2.6 GB for 2022 through 2026.
+3. **How does the running application read and write Iceberg tables?**
+   Answered by check 6, as a proposal: with one Spark session that the
+   application starts once and keeps. See "Proposed by Claude".
+4. **Can a workbench model endpoint carry the volume?** Answered by check 6:
+   yes. One replica forecast 5,000 series of 200 steps in 105 seconds. The
+   limits are 30 seconds and 5 MB for a request, and one request at a time.
+   More volume means more replicas and requests sent side by side, which is
+   not built.
+5. **How is the React front end built during the AMP install?** Answered by
+   check 6, as a proposal: the runtime has no Node, so an install step
+   installs it through pip and then builds. See "Proposed by Claude".
 6. **Do the minimum history figures of decision 28 hold on real data?** They
    rest on synthetic data only. To be checked against the demo data's
    backtest once the demo data is ingested.
@@ -268,8 +290,9 @@ Rossmann and Walmart.
   2023 copy of the full table had 31,339,341 rows and 24 columns. Not in the
   retail tasks of fev-bench or the sales datasets of GIFT-Eval.
   Download: `https://idh-be.iowa.gov/api/v1/datasets/<id>/rows.csv`, with id
-  1259 for 2022, 1261 for 2024, 1262 for 2025 and 1263 for 2026. The id for
-  2023 was not confirmed.
+  1259 for 2022, 1260 for 2023, 1261 for 2024, 1262 for 2025 and 1263 for
+  2026. All five were confirmed on 17 November 2026. The address returns a
+  zip archive of CSV parts, not a CSV.
   Size estimate, not a measurement: an older description gives 800 MB for 3
   million rows, so about 0.7 GB per year and about 3 GB for 2022 through 2026.
 - **M5 (Walmart).** 30,490 item-by-store daily series over 1,941 days. Ruled
@@ -346,9 +369,11 @@ Verified by running it on 17 November 2026 (see "First build checks 1 to 5"):
 NaN inside a history, speed for hundreds and thousands of series, the exact
 quantile levels, and what happens with a history shorter than 32 steps.
 
+Verified on 17 November 2026 by check 6: 100 series fit in one request to a
+workbench model endpoint.
+
 Not yet verified by running anything:
 
-- Whether 100 series fit in one request to a workbench model endpoint.
 - The time of one call of 5,000 series. It was timed only as batches.
 - The terms of the weights license. The download brings no license file.
 
@@ -559,6 +584,160 @@ to 5 runs, model already loaded.
 - The throwaway script and its raw output are in `/home/cdsw/.timestral-checks`,
   which is not in git. Every number from them is in this section.
 
+## First build check 6: results (17 November 2026)
+
+Run by Claude Code in the same Cloudera AI session as checks 1 to 5, with
+Oliver's go-ahead, because it creates things in his workspace.
+
+### Spark and Iceberg. Works.
+
+- The project has a Spark data connection, named `applied-ai-aw-dl` in this
+  workspace. A session comes from Cloudera AI's own library:
+  `cml.data_v1.get_connection(name).get_spark_session()`. It is Spark 3.5.1
+  and arrives already set up for Iceberg; no extra settings were needed.
+- An Iceberg table is created with `create table ... using iceberg`, appended
+  to with `dataframe.writeTo(table).append()`, and read with
+  `spark.table(table)` or SQL. The table's `snapshots` listing showed each
+  append as its own entry, so nothing was overwritten.
+- Timings, in a 2 vCPU, 3.9 GB session:
+
+  | Step | Seconds |
+  | --- | --- |
+  | Start the Spark session | 20 |
+  | First write of 1,200 rows, which also starts the Spark workers | 38 |
+  | Later write of 1,200 rows | 1.2 |
+  | Write of 60,000 rows (5,000 series by 12 dates) | 4.1 |
+  | Read one forecast of 1,200 rows into pandas | 1.6 |
+  | Filter and sum in the query, result into pandas | 1.5 |
+
+- Spark takes its memory from the container before Python does: it set
+  itself 3,051 MB of the session's 3,933 MB. The application has to cap
+  Spark's memory so that the model and the web server fit beside it.
+- A date column comes back to pandas as Python date objects, not as pandas
+  dates. The storage layer has to convert it.
+- The test used a scratch database, `u4cast_check`, and dropped it afterwards.
+- The project's own Python environment (`.venv`) can import Spark and
+  Cloudera AI's libraries, so the application can run from it.
+- numpy and pandas are now pinned below 2 and below 3 in `pyproject.toml`.
+  Reason: the runtime's Spark 3.5.1 was released for numpy 1 and pandas 2,
+  and the lock file had picked numpy 2.5 and pandas 3.1.
+
+### Building the front end. Works, with Node installed through pip.
+
+- The runtime has no Node. `pip install nodejs-wheel` installs Node 24.19 and
+  npm 11.17 into a Python environment, with no administrator rights needed.
+  It took 90 seconds and 205 MB on the project disk.
+- With that, a new React project (made with Vite, a common React build tool)
+  installed its packages from the npm registry in 9 seconds and built in
+  about 1 second. So the AMP can build the front end in an install step.
+
+### Workbench model endpoint. The minimum bar is met.
+
+One forecast of 100 series of 32 steps, horizon 12, went through the endpoint
+by way of the forecasting package in 0.75 seconds. The answer was complete,
+finite, and low was at or below the median, which was at or below high.
+
+How it was deployed:
+
+- `serving/deploy_workbench_model.py` created the model `timestral`, built
+  it and deployed it through Cloudera AI's API. The build took 3 minutes and
+  the deployment 45 seconds. One replica, 4 vCPU and 8 GB, on the runtime
+  Python 3.12, Standard, PBJ Workbench, 2026.08.3.
+- `cdsw-build.sh` installs torch and Timestral into the image and downloads
+  the weights there, so a replica starts without downloading anything.
+- Authentication is on. A call without the API key is refused with status
+  403.
+- The model used 4 processor threads, matching its 4 vCPU.
+- The deploy step saves the model's access key in the project's environment
+  variables as `U4CAST_MODEL_ACCESS_KEY`. The application reads it there.
+
+Two things went wrong on the way and are worth knowing:
+
+- The first deployment answered every call with status 400 and no reason.
+  Cause: Cloudera AI requires its decorator `cml.models_v1.cml_model` on the
+  served function. It is in `serving/workbench_model.py` now.
+- One of three builds sat in its upload stage ("pushing") for over 20
+  minutes. Starting a new build of the same code finished in 15 seconds.
+
+Time for one request, model on 4 threads:
+
+| Series × steps | Horizon | Seconds in total | Of which the model |
+| --- | --- | --- | --- |
+| 1 × 32 | 12 | 0.13 | 0.08 |
+| 100 × 32 | 12 | 0.71 | 0.66 |
+| 100 × 200 | 12 | 2.2 | 2.1 |
+| 250 × 200 | 12 | 5.5 | 5.0 |
+| 500 × 200 | 12 | 12.0 | 11.1 |
+| 125 × 730 | 30 | 8.8 | 7.9 |
+| 100 × 200 | 365 | 5.1 | 4.7 |
+| 2,000 × 32 | 64 | 15.0 | 13.3 |
+
+- Model time follows the work: about 2.5 milliseconds per series for each
+  block of 32 steps, counting the blocks of history and of horizon together.
+  The measurements ranged from 2.2 to 3.3.
+
+The limits, measured:
+
+- **Time: a request is cut off at 30 seconds,** with status 500 and the text
+  "context deadline exceeded".
+- **A request that is cut off keeps the replica busy.** The replica goes on
+  working on it and answers nothing else until it is done. Other requests
+  wait 30 seconds and fail with "context deadline exceeded --- model busy".
+  In the test the replica was unavailable for about 3 minutes after two
+  oversized requests. So a request must never be sized near the limit.
+- **Request size: 4 MB was accepted, 6 MB was refused** with status 413.
+  That fits the 5 MB in Cloudera's documentation. Sending is slow: about
+  0.85 seconds for each MB. The request for 250 series of 200 steps is
+  0.5 MB.
+- **Answer size:** an answer of 3.8 MB came back without trouble.
+- **One request at a time.** Two requests sent together were answered one
+  after the other: 5.6 and 10.7 seconds.
+
+Volume, through the forecasting package with its default batching:
+
+| Series × steps | Horizon | Requests | Seconds |
+| --- | --- | --- | --- |
+| 500 × 200 | 12 | 2 of 250 series | 10.6 |
+| 5,000 × 200 | 12 | 20 of 250 series | 105 |
+| 1,000 × 104 | 13 | 3 of 400 series | 12.8 |
+
+No request in these runs took longer than 5.3 seconds. This answers open
+question 4: one replica carries 5,000 series in under two minutes.
+
+### What Cloudera's documentation says about workbench models
+
+Read on 17 November 2026 from docs.cloudera.com (Cloudera AI, public cloud).
+
+- A request is cut off after 30 seconds by default. Only an administrator can
+  change that, with a cluster command.
+- "Requests to models should not be more than 5 MB in size." It is written as
+  guidance; no enforced limit is described.
+- A replica (one running copy of the model) answers one request at a time. A
+  request waits up to 30 seconds for a free replica, then gets the error
+  `model.busy` with status 429.
+- Cloudera's guideline: work that takes over 15 seconds belongs in a batch
+  job, not a model.
+- The model image is built from a copy of the project files that leaves out
+  what `.gitignore` lists. Packages installed in a session are not in it.
+  The build script `cdsw-build.sh` has to install them.
+- A model gets the project's environment variables.
+- A caller authenticates with `Authorization: Bearer` and a user API key,
+  unless authentication is switched off for the model.
+
+### The Iowa data, seen while waiting for the model build
+
+- All five download addresses answer from this environment. The dataset id
+  for 2023 is 1260.
+- An address returns a zip archive, not a CSV. Inside are CSV parts stored
+  without compression, so the archive is about as large as the data.
+- 23 columns. The ones the demo needs: `ordered_on` (the date, as
+  `2025-01-01`), `store_no`, `store_name`, `store_city`, `county_name`,
+  `category_code`, `category_name`, `vendor_name`, `item_no`, `im_desc` (the
+  item's name), `sales_bottles`, `sales_dollars`, `sales_liters`.
+- Rows average 216 bytes in the first part of the 2025 file. By that figure a
+  year is about 0.55 GB and 2022 through 2026 about 2.6 GB, inside the cap of
+  1 to 5 GB. This is an estimate from one sample, not a measurement.
+
 ## What the old code did (reference only)
 
 Three private repos were read on 17 November 2026:
@@ -658,4 +837,22 @@ Claude Code adds dated lines here.
   demo data. That commit's decision 27 keeps its number. The decisions this
   session had recorded as 27 to 33 are now 28 to 34, here and in
   `CLAUDE.md`. Commit messages written before the merge use the old numbers.
-
+- 17 November 2026. Ran first build check 6. Results are in "First build
+  check 6: results". All six checks are now done. The minimum bar is met:
+  100 series forecast through a workbench model endpoint.
+- 17 November 2026. Built what check 6 needed, as project code: the endpoint
+  caller and the served handler (`src/u4cast/endpoint.py`), the choice of
+  where the model runs (`src/u4cast/serving.py`), the served function and the
+  deploy step (`serving/`), and the image build script (`cdsw-build.sh`).
+  With this the model interface has both implementations version one asks
+  for. 116 tests run without the weights.
+- 17 November 2026. Batches for the endpoint are sized by work, not by a
+  fixed number of series. Why: the endpoint cuts a request off at 30 seconds
+  and a request that is cut off blocks the replica.
+- 17 November 2026. Pinned numpy below 2 and pandas below 3. Why: the
+  runtime's Spark 3.5.1 was released for those versions. This replaces the
+  earlier note that the lock file had resolved pandas to 3.1.
+- 17 November 2026. Check 6 left two things in Oliver's workspace: the
+  running workbench model `timestral` (one replica, 4 vCPU and 8 GB) and the
+  project environment variable `U4CAST_MODEL_ACCESS_KEY`. Its scratch
+  database was dropped.

@@ -241,6 +241,9 @@ tables. The application never writes to a history table.
 
 ## First build step: check what is not yet verified
 
+All six checks were run on 17 November 2026. The results are in
+`docs/decisions.md`. They do not need to be run again.
+
 Run these and record the results in `docs/decisions.md`:
 
 1. Install Timestral and forecast a small sample on CPU.

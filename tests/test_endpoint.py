@@ -109,6 +109,29 @@ def test_a_busy_endpoint_is_tried_again(monkeypatch):
     assert waits == [2.0, 4.0]
 
 
+def test_a_replica_busy_with_another_request_is_tried_again(monkeypatch):
+    monkeypatch.setattr(endpoint_module.time, "sleep", lambda seconds: None)
+    busy = ModelEndpointError(
+        'status 500: {"errors":{"error while calling model":'
+        '"context deadline exceeded --- model busy"}}',
+        500,
+    )
+    fake = FakeEndpoint(failures=[busy])
+    assert caller(fake).forecast(histories(2), horizon=1).forecast.shape == (2, 1)
+    assert len(fake.requests) == 2
+
+
+def test_a_request_that_took_too_long_is_not_sent_again(monkeypatch):
+    monkeypatch.setattr(endpoint_module.time, "sleep", lambda seconds: None)
+    too_long = ModelEndpointError(
+        'status 500: {"errors":{"error while calling model":"context deadline exceeded"}}', 500
+    )
+    fake = FakeEndpoint(failures=[too_long])
+    with pytest.raises(ModelEndpointError, match="deadline exceeded"):
+        caller(fake).forecast(histories(2), horizon=1)
+    assert len(fake.requests) == 1
+
+
 def test_an_endpoint_that_stays_busy_or_fails_is_reported(monkeypatch):
     monkeypatch.setattr(endpoint_module.time, "sleep", lambda seconds: None)
     busy = FakeEndpoint(failures=[ModelEndpointError("busy", 429)] * 3)

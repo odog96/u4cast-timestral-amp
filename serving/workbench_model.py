@@ -12,6 +12,7 @@ import math
 import os
 from typing import Any
 
+import cml.models_v1 as cml_models
 import torch
 
 from u4cast.endpoint import handle_request
@@ -51,6 +52,9 @@ _forecaster.load()
 logger.info("Serving %s on %d threads", _settings.model_name, torch.get_num_threads())
 
 
+# Cloudera AI requires this decorator on a served function. It reads the
+# request, calls the function, and reports an error the function raises.
+@cml_models.cml_model
 def forecast(args: dict[str, Any]) -> dict[str, Any]:
     """Forecast `args["horizon"]` steps after each row of `args["histories"]`."""
     answer = handle_request(_forecaster, args)

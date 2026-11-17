@@ -40,6 +40,9 @@ DEFAULT_WORK_BUDGET = 2000
 DEFAULT_TIMEOUT = 60.0
 # Statuses that mean "try again shortly": the replica is busy or restarting.
 _RETRY_STATUSES = (429, 502, 503)
+# A replica answers one request at a time. A request that waited 30 seconds
+# for a busy replica comes back as status 500 with this text.
+_BUSY_TEXT = "model busy"
 _SIGNIFICANT_DIGITS = 7  # what a 32-bit float holds; keeps requests small
 
 PostJson = Callable[[str, dict[str, Any], dict[str, str], float], dict[str, Any]]
@@ -163,7 +166,7 @@ class WorkbenchModelForecaster(BatchedForecaster):
         }
         answer = self._call(payload)
         if not answer.get("success", False) or "response" not in answer:
-            detail = json.dumps(answer.get("errors", answer))[:300]
+            detail = json.dumps(answer.get("errors") or answer.get("error") or answer)[:300]
             raise ModelEndpointError(f"The model endpoint did not return a forecast: {detail}")
         response = answer["response"]
         expected = (histories.shape[0], horizon)
@@ -186,7 +189,8 @@ class WorkbenchModelForecaster(BatchedForecaster):
             try:
                 return self._post(self.endpoint, payload, self._headers, self.timeout)
             except ModelEndpointError as error:
-                if error.status not in _RETRY_STATUSES or attempt == self.retries:
+                busy = error.status in _RETRY_STATUSES or _BUSY_TEXT in str(error)
+                if not busy or attempt == self.retries:
                     raise
                 wait = 2.0 * (attempt + 1)
                 logger.warning(
