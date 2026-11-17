@@ -4,7 +4,8 @@
 Nothing else in the code knows where the model runs. This module holds the
 interface, the implementation that loads Timestral in the same process, and a
 stand-in that needs no weights. The implementation that calls a Cloudera AI
-Workbench model endpoint is added once the endpoint's limits are known.
+Workbench model endpoint is in `u4cast.endpoint`, and `u4cast.serving` picks
+between them from the settings.
 """
 
 from __future__ import annotations
@@ -78,9 +79,10 @@ class BatchedForecaster(abc.ABC):
 
     def forecast(self, histories: np.ndarray, horizon: int) -> ModelForecast:
         histories = _check_request(histories, horizon)
+        size = self._batch_size_for(histories.shape[1], horizon)
         parts = [
-            self._forecast_batch(histories[start : start + self.batch_size], horizon)
-            for start in range(0, histories.shape[0], self.batch_size)
+            self._forecast_batch(histories[start : start + size], horizon)
+            for start in range(0, histories.shape[0], size)
         ]
         logger.info(
             "Forecast %d series of %d steps, horizon %d, in %d model calls",
@@ -96,6 +98,10 @@ class BatchedForecaster(abc.ABC):
             low_level=parts[0].low_level,
             high_level=parts[0].high_level,
         )
+
+    def _batch_size_for(self, steps: int, horizon: int) -> int:
+        """Return how many series go in one model call for this history length and horizon."""
+        return self.batch_size
 
     @abc.abstractmethod
     def _forecast_batch(self, histories: np.ndarray, horizon: int) -> ModelForecast:
@@ -125,6 +131,10 @@ class InProcessForecaster(BatchedForecaster):
         self.model_name = model_name
         self.batch_size = batch_size
         self._model: Any = None
+
+    def load(self) -> None:
+        """Load the model now, so that the first forecast does not wait for it."""
+        self._load()
 
     def _load(self) -> Any:
         if self._model is None:

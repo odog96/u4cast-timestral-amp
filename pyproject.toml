@@ -5,8 +5,8 @@ description = "Forecast many time series at once with Mistral's Timestral model 
 license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
-    "numpy>=1.26",
-    "pandas>=2.2",
+    "numpy>=1.26,<2",
+    "pandas>=2.2,<3",
 ]
 
 [project.optional-dependencies]
@@ -49,7 +49,7 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "tests", "serving"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF", "ANN", "T20", "PT"]

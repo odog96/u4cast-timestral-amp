@@ -129,13 +129,12 @@ def test_in_process_forecaster_uses_the_levels_the_model_reports(fake_timestral)
     assert np.allclose(result.high[:, 0], last * 1.95)
 
 
-def test_model_name_and_batch_size_come_from_the_environment(monkeypatch):
-    monkeypatch.delenv("U4CAST_MODEL_NAME", raising=False)
-    monkeypatch.delenv("U4CAST_BATCH_SIZE", raising=False)
-    assert Settings.from_environment() == Settings("mistralai/Timestral-209M", 500)
-    monkeypatch.setenv("U4CAST_MODEL_NAME", "mistralai/Timestral-28M")
-    monkeypatch.setenv("U4CAST_BATCH_SIZE", "100")
-    assert Settings.from_environment() == Settings("mistralai/Timestral-28M", 100)
-    monkeypatch.setenv("U4CAST_BATCH_SIZE", "0")
+def test_model_name_and_batch_size_come_from_the_environment():
+    defaults = Settings.from_environment({})
+    assert (defaults.model_name, defaults.batch_size) == ("mistralai/Timestral-209M", 500)
+    changed = Settings.from_environment(
+        {"U4CAST_MODEL_NAME": "mistralai/Timestral-28M", "U4CAST_BATCH_SIZE": "100"}
+    )
+    assert (changed.model_name, changed.batch_size) == ("mistralai/Timestral-28M", 100)
     with pytest.raises(ValueError, match="at least 1"):
-        Settings.from_environment()
+        Settings.from_environment({"U4CAST_BATCH_SIZE": "0"})

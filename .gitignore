@@ -35,3 +35,4 @@ node_modules/
 
 # Throwaway work from the first build checks
 .timestral-checks/
+.ssh/
