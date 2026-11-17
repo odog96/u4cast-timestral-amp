@@ -12,8 +12,9 @@ only. Do not copy code from it. See `docs/decisions.md` for what the old app did
 
 - Owner: Oliver Zarate
 - First demo: 27 November 2026
-- Demo data: a retail dataset with many series. Iowa liquor sales is the
-  working choice, not a final one.
+- Demo data: Iowa liquor sales, 2022 through the latest month. Details and
+  download addresses are in `docs/decisions.md` under "Demo dataset
+  comparison".
 - Purpose of the demo: show Cloudera AI plus Timestral as a demand forecasting
   solution, and give Oliver exposure as its creator
 
@@ -202,6 +203,8 @@ tables. The application never writes to a history table.
   license; each user is responsible for checking and complying with it; and
   this project is a reference example, not something Cloudera runs in
   production.
+- The README must also credit the State of Iowa, Department of Revenue, as
+  the source of the demo data. Its license, CC BY 4.0, requires that.
 
 ## Engineering standards
 

@@ -107,6 +107,10 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
     share the code. It does not cover the Timestral weights, which have
     Mistral's own license (decision 12).
 
+27. **Demo data is Iowa liquor sales, 2022 through the latest month.** Oliver
+    confirmed after Claude's comparison of candidates. This settles decision
+    18. The README must credit the State of Iowa, Department of Revenue.
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -128,12 +132,9 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
    Cloudera. Not set yet. Oliver to check whether Cloudera has a rule for
    work published by an employee. Until then, do not add copyright notices
    to source files.
-2. **Which demo dataset, and which cut of it?** Claude compared candidates on
-   17 November 2026 and recommends staying with Iowa liquor sales. Oliver has
-   not confirmed. See "Demo dataset comparison" below. Proposed cut: the
-   yearly datasets from 2022 through the latest month. Not yet known: how many
-   stores and items the data has, the size of the CSV files, and whether the
-   Cloudera AI environment can reach the download address.
+2. **Three unknowns about the Iowa data** (decision 27): how many stores and
+   items it has, the size of the CSV files, and whether the Cloudera AI
+   environment can reach the download address. The ingest will answer them.
 3. **How does the running application read and write Iceberg tables?** Spark
    is decided for the demo data ingest. For the running application, a Spark
    session may be slow to start. To be settled in the target environment.
@@ -151,7 +152,7 @@ FreshRetailNet-50K and the UCI page for Online Retail II. Not read: the list
 of datasets in the TIME benchmark, and the Kaggle rules for Favorita,
 Rossmann and Walmart.
 
-- **Iowa liquor sales (recommended).** Orders of spirits by Iowa stores, by
+- **Iowa liquor sales (chosen, decision 27).** Orders of spirits by Iowa stores, by
   product and date, from January 2012, updated monthly. License: CC BY 4.0,
   which allows any use, including commercial, if the source is credited.
   About 2.4 to 2.6 million rows per year (2018: 2,355,558; 2022: 2,564,565;
@@ -177,10 +178,9 @@ Rossmann and Walmart.
   4.0; an R package that bundles it says non-commercial use only. Too small
   for the Spark ingest to mean anything.
 
-Two things follow if Iowa is confirmed. The README must credit the State of
-Iowa, Department of Revenue, as CC BY 4.0 requires. And because Mistral does
-not name the real data Timestral was trained on, overlap with any public
-dataset cannot be ruled out; say so if the demo reports accuracy.
+Because Mistral does not name the real data Timestral was trained on,
+overlap with any public dataset cannot be ruled out. Say so if the demo
+reports accuracy.
 
 ## Deferred items
 
