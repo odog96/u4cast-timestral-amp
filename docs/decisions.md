@@ -65,7 +65,9 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
 17. **Serve Timestral as a model in Cloudera AI Workbench for now**, deployed
     through Cloudera AI's API. Design the code so the model can be upgraded and
     so it can later be served from Cloudera AI Inference Service.
-18. **Demo data: Iowa liquor sales**, ingested with Spark.
+18. **Demo data: retail with many series, ingested with Spark.** Iowa liquor
+    sales is the working choice; Oliver said it does not have to be Iowa. If
+    it is Iowa, cap what is pulled into Spark at 1 to 5 GB.
 19. **Forecasts must be traceable when they are reissued.** Oliver's example:
     100 SKUs with two years of history, forecast monthly for the next 12
     months, reissued every month, so forecasts overlap. Each series has a
@@ -83,17 +85,28 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
     the user can choose; keeping every reissue of a forecast; a view of
     several forecasts' predictions for the same date next to what happened.
 
-## Changed after Oliver accepted it
-
-- **Minimum history.** Oliver accepted Claude's proposal of 32 time steps.
-  Oliver's own example in decision 19, two years of monthly history, has 24
-  time steps and would fail that rule. Claude changed the default to 24 and
-  made it a setting. This is proposed until Oliver confirms. The first build
-  checks include a backtest on 24 steps of history.
+23. **Minimum history is 32 time steps, enforced.** Oliver: "if Timestral
+    requires 32 steps, then that is what we enforce - full stop." What is
+    known: Timestral's README states no minimum, and a secondary source
+    (marktechpost.com) says it reads history in blocks of 32 steps. So 32 is
+    not a confirmed requirement of the model. It is enforced until the first
+    build checks show what Timestral does with shorter histories. Consequence:
+    monthly data needs 32 months, so the two years of monthly history in
+    decision 19's example would be rejected. This withdraws a change Claude
+    had made to a default of 24 steps.
+24. **Minimum bar for volume: 100 series in one forecast.** Request size
+    limits of the workbench model endpoint are worked out as the design goes
+    on, starting with a test of 100 series.
+25. **A forecast is made for a slice of the data, not the whole table.** The
+    table in Spark can be gigabytes; what goes to the model is small, for
+    example 100 series of 32 steps. The pipeline needs a way to select the
+    slice. Oliver left the way to Claude.
 
 ## Proposed by Claude, not yet confirmed by Oliver
 
-- Minimum history default of 24 time steps (see above).
+- How a slice is selected: the user filters on dimension values and picks a
+  history window; the filter runs in the query, so only the slice is loaded;
+  the filter is saved with the forecast, so a reissue uses the same slice.
 - A second way to run the model, loaded in the same process as the
   application, as the fallback if the workbench model endpoint cannot carry
   the volume.
@@ -109,7 +122,8 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
    license file that says what other people may do with the code. Without one,
    nobody else may legally reuse it. Claude suggests Apache 2.0. Oliver to
    confirm, and to check whether Cloudera has a rule for this.
-2. **Which cut of the Iowa liquor data?** The old backend repo
+2. **Which demo dataset, and which cut of it?** Iowa liquor sales is the
+   working choice (decision 18), with a 1 to 5 GB cap. The old backend repo
    `Rev-Analytics/u4cast-base` has a weekly extract at
    `test_folder/iowa_liquors.csv`: 112 stores, 214 weeks, 21,192 rows
    (measured). The State of Iowa publishes the full data at item level, which
@@ -181,7 +195,8 @@ Not yet verified by running anything:
 - Whether NaN inside a history works as expected.
 - Speed for hundreds or thousands of series in one call.
 - The exact quantile levels.
-- Accuracy on a history as short as 24 steps.
+- What Timestral does with a history shorter than 32 steps.
+- Whether 100 series fit in one request to a workbench model endpoint.
 
 ## What the old code did (reference only)
 

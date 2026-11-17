@@ -12,7 +12,8 @@ only. Do not copy code from it. See `docs/decisions.md` for what the old app did
 
 - Owner: Oliver Zarate
 - First demo: 27 November 2026
-- Demo data: Iowa liquor sales, a retail dataset with many series
+- Demo data: a retail dataset with many series. Iowa liquor sales is the
+  working choice, not a final one.
 - Purpose of the demo: show Cloudera AI plus Timestral as a demand forecasting
   solution, and give Oliver exposure as its creator
 
@@ -83,14 +84,22 @@ are in this file, which loads with this one:
      endpoint cannot carry the volume.
 - Leave room for a third implementation that calls Cloudera AI Inference
   Service, Cloudera's separate service for serving models. Do not build it now.
-- Send series to the endpoint in batches. Find the workbench model endpoint's
-  limits on request size and request time first, and size the batches to fit.
+- The minimum bar: one forecast of 100 series must work through the workbench
+  model endpoint. Test that first. Larger volumes are sized as the design
+  goes on: send series in batches that fit the endpoint's limits on request
+  size and request time.
 
 ### Data in
 
 - Two sources: an Iceberg table (Iceberg is the table format of Cloudera's
   data lake), and CSV upload.
 - The demo data is ingested into an Iceberg table with Spark by an AMP step.
+  Cap what is pulled in at 1 to 5 GB.
+- The full table stays in Iceberg. A forecast is made for a slice of it: the
+  series the user selects by filtering on dimension values, over the history
+  window the user selects. Apply the filter and any summing up to the chosen
+  dimension columns in the query, so only the slice is loaded into memory and
+  sent to the model. A slice can be as small as 100 series of 32 time steps.
 - The user picks the date column, the target column (the value to forecast)
   and the dimension columns (for example store, category, SKU).
 - Frequencies: daily, weekly, monthly, quarterly. Nothing finer than daily.
@@ -103,8 +112,8 @@ are in this file, which loads with this one:
   not zero. Timestral accepts NaN as missing.
 - All series in a dataset must have the same history length. A series that
   does not is left out and listed for the user.
-- Minimum history per series is a setting. Default: 24 time steps (proposed),
-  so two years of monthly data passes. Timestral states no minimum.
+- Minimum history per series: 32 time steps, enforced. A series with less is
+  left out and listed for the user.
 - The user can choose the history window, meaning the first and last date of
   history a forecast uses. The default is all of it.
 
@@ -130,9 +139,10 @@ tables. The application never writes to a history table.
   after the end of history the row is). New forecasts are appended. Nothing is
   overwritten.
 - **Forecasts table.** One row per forecast: `forecast_id`, `forecast_name`,
-  the dataset, target column, dimension columns, frequency, the first and last
-  date of history used (`history_start_date`, `history_end_date`), horizon,
-  model name, `kind`, creation time.
+  the dataset, target column, dimension columns, the filter that defines the
+  slice, frequency, the first and last date of history used
+  (`history_start_date`, `history_end_date`), horizon, model name, `kind`,
+  creation time. Reissuing a forecast reuses its filter.
 - **Datasets table.** One row per saved dataset: name, source table, column
   roles, frequency.
 - Reissuing a forecast creates a new `forecast_id` under the same
@@ -161,8 +171,8 @@ tables. The application never writes to a history table.
   APIs) that also serves a front end built with React (a JavaScript library
   for building web interfaces). One process for the application.
 - Interface quality is a goal. See "Goal".
-- Screens, in order: add a dataset, pick its columns, create a forecast, explore
-  the result, download.
+- Screens, in order: add a dataset, pick its columns, select a slice, create a
+  forecast, explore the result, download.
 - Explore shows a chart of history, forecast and range, either for the total of
   all series or for one combination of dimension values.
 - With many series, give a searchable picker for one series and a table of
@@ -221,10 +231,13 @@ Run these and record the results in `docs/decisions.md`:
 1. Install Timestral and forecast a small sample on CPU.
 2. Print `forecast.quantile_levels` and the output shapes.
 3. Confirm NaN inside a history is accepted.
-4. Time one call for 500 series and for 5,000 series of about 200 steps.
-5. Backtest a few series with only 24 steps of history and look at the error.
-6. In Cloudera AI: the request size and time limits of a workbench model
-   endpoint, whether the runtime can build a React front end (Node available),
+4. Time one call for 100 series of 32 steps, then for 500 and 5,000 series
+   of about 200 steps.
+5. Find out what Timestral does with a history shorter than 32 steps: whether
+   it runs, and how large the backtest error is.
+6. In Cloudera AI: forecast 100 series through a workbench model endpoint,
+   which is the minimum bar. Then note the endpoint's request size and time
+   limits, whether the runtime can build a React front end (Node available),
    and how a Spark session reads and writes Iceberg tables.
 
 ## Not in version one
