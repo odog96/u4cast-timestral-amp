@@ -31,6 +31,8 @@ class IssuedForecast:
     record: ForecastRecord
     values: pd.DataFrame
     """One row per series and future date, in the layout of the forecast values table."""
+    rows: np.ndarray
+    """Which series of the panel were forecast, as positions in the panel."""
 
 
 def issue_forecast(
@@ -63,8 +65,11 @@ def issue_forecast(
             f"got {history_steps}."
         )
 
-    result = forecaster.forecast(panel.values[:, :history_steps], horizon)
-    expected = (panel.n_series, horizon)
+    # Series can start at different dates. Forecast the ones that have the
+    # minimum history at this end of history; from a past cutoff, fewer do.
+    rows = np.flatnonzero(panel.first_steps <= history_steps - panel.minimum_history)
+    result = forecaster.forecast(panel.history(history_steps)[rows], horizon)
+    expected = (len(rows), horizon)
     for name in ("forecast", "low", "high"):
         if getattr(result, name).shape != expected:
             raise ValueError(
@@ -87,16 +92,17 @@ def issue_forecast(
         model_name=forecaster.model_name,
         kind=kind,
         created_at=created_at or dt.datetime.now(dt.UTC),
+        fill=panel.fill,
     )
 
     future_dates = panel.calendar.future_dates(history_steps, horizon)
-    values = panel.series.iloc[np.repeat(np.arange(panel.n_series), horizon)].reset_index(drop=True)
+    values = panel.series.iloc[np.repeat(rows, horizon)].reset_index(drop=True)
     values["forecast_id"] = forecast_id
-    values["date"] = np.tile(future_dates.to_numpy(), panel.n_series)
+    values["date"] = np.tile(future_dates.to_numpy(), len(rows))
     values["forecast"] = result.forecast.ravel()
     values["low"] = result.low.ravel()
     values["high"] = result.high.ravel()
-    values["step"] = np.tile(np.arange(1, horizon + 1), panel.n_series)
+    values["step"] = np.tile(np.arange(1, horizon + 1), len(rows))
     values = values[columns]
 
     logger.info(
@@ -104,12 +110,12 @@ def issue_forecast(
         kind.value,
         forecast_name,
         forecast_id,
-        panel.n_series,
+        len(rows),
         record.history_end_date,
         horizon,
         len(values),
     )
-    return IssuedForecast(record, values)
+    return IssuedForecast(record, values, rows)
 
 
 def reissue_forecast(
@@ -135,6 +141,11 @@ def reissue_forecast(
         raise ValueError(
             f"A reissue must use the same frequency as the forecast it reissues: "
             f"{previous.frequency.value}."
+        )
+    if panel.fill is not previous.fill:
+        raise ValueError(
+            "A reissue must fill dates with no row the same way as the forecast it reissues: "
+            f"{previous.fill.value}."
         )
     return issue_forecast(
         panel,

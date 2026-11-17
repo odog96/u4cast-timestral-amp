@@ -111,11 +111,16 @@ are in this file, which loads with this one:
 - Each unique combination of dimension values is one series, identified by
   `ts_id`. Build `ts_id` from the dimension values themselves, so a series has
   the same `ts_id` in every forecast. Do not use a running number.
-- Put every series on one regular date grid for the frequency. A date with no
-  data inside a series' history becomes NaN (the marker for a missing number),
-  not zero. Timestral accepts NaN as missing.
-- All series in a dataset must have the same history length. A series that
-  does not is left out and listed for the user.
+- Put every series on one regular date grid for the frequency.
+- When a dataset is added, the user says what a date with no row means for
+  it. The choices: missing (stays NaN, the marker for a missing number, which
+  Timestral accepts), zero (nothing happened, as in sales and orders), the
+  series' average, a straight line between the known values around it, or
+  the last known value repeated. Never fill without the user's choice.
+- Series in one forecast can start at different dates. A series' history
+  runs from its first row to the end of the history window, and it is
+  missing before its first row, whatever the choice above. Decision 35 in
+  `docs/decisions.md` gives the reasons.
 - Minimum history per series, enforced, depends on the frequency: 24 time
   steps for monthly data, 8 for quarterly and 104 for weekly (two years in
   each case), and 32 for daily. The user can override the weekly minimum down
@@ -149,9 +154,10 @@ tables. The application never writes to a history table.
   the dataset, target column, dimension columns, the filter that defines the
   slice, frequency, the first and last date of history used
   (`history_start_date`, `history_end_date`), horizon, model name, `kind`,
-  creation time. Reissuing a forecast reuses its filter.
+  creation time, and what a date with no row became. Reissuing a forecast
+  reuses its filter.
 - **Datasets table.** One row per saved dataset: name, source table, column
-  roles, frequency.
+  roles, frequency, and what a date with no row means.
 - Reissuing a forecast creates a new `forecast_id` under the same
   `forecast_name`. Example: 100 SKUs forecast monthly for the next 12 months
   gives 1,200 rows per issue. The issues of January, February and March each
@@ -181,8 +187,8 @@ tables. The application never writes to a history table.
 - Screens, in order: add a dataset, pick its columns, select a slice, create a
   forecast, explore the result, download.
 - Where the user picks the history window, show how many series each choice
-  of start date keeps, because a series that does not cover the whole window
-  is left out.
+  of start date keeps, because a series with less than the minimum history
+  inside the window is left out.
 - Explore shows a chart of history, forecast and range, either for the total of
   all series or for one combination of dimension values.
 - With many series, give a searchable picker for one series and a table of

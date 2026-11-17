@@ -162,6 +162,20 @@ Code session, after the forecasting package was built.
     series that start at different dates, the default leaves out every
     series that starts later than the earliest one. The user moves the start
     date; the rule that all series cover the whole window does not change.
+    (Decision 35 has since replaced that rule. What the interface shows is
+    now how many series have the minimum history inside the window.)
+
+Decision 35 was made by Oliver on 17 November 2026 in the same Claude Code
+session, after seeing how many series the demo data lost.
+
+35. **The user chooses how a date with no row is filled, and series in one
+    forecast can have different lengths.** This replaces decision 8 and the
+    rule that such a date is always missing. Oliver: "yes lets ask user how
+    to fill in - 0, average, or some other interpolation technique."
+    Reason: on the Iowa data the old rules kept 29% of stores and 0.2% of
+    store-by-item series, because in order data a week with no row means
+    nothing was ordered. The choices and their exact meaning are Claude's
+    and are listed under "Proposed by Claude".
 
 ## Proposed by Claude, not yet confirmed by Oliver
 
@@ -256,6 +270,40 @@ The following were chosen while building the storage layer and the ingest on
   name that exists, so it never changes history that is already there.
 - **Spark is capped at 8 workers, 2 GB for the driver and 2 GB per worker.**
 
+The following are the details of decision 35, chosen while building it on 17
+November 2026.
+
+- **Five choices for a date with no row,** made once per dataset when it is
+  added:
+  - missing: it stays missing and Timestral works around it;
+  - zero: nothing happened, as in sales and orders;
+  - average: the average of the series' known values in the history window;
+  - interpolate: a straight line between the known values before and after
+    it, and the last known value repeated after the last one;
+  - previous: the last known value repeated.
+- **The fill applies from a series' first row to the end of the history
+  window.** Before its first row a series is always missing, because it did
+  not exist yet. So a store that opened in 2024 is not given zeros for 2022.
+- **A series is kept if it has the minimum history from its first row to the
+  end of the window.** It no longer needs a value on the first or the last
+  date. Consequence: a series whose rows stopped long ago is still forecast.
+  With zero that gives a forecast near zero, which is right for a store that
+  closed. With the other choices the forecast rests on old values.
+- **In a backtest the fill uses only what was known at the cutoff.** An
+  average or a straight line computed over the whole history would hand the
+  model values from after the cutoff.
+- **In a backtest a date with no row is scored only when it means zero.**
+  Then zero is what actually happened. With the other choices the filled
+  value is a guess, not an actual, and the date is not scored.
+- **In a backtest a series that starts late is forecast only from the
+  cutoffs by which it has the minimum history.**
+- **The choice is stored with the dataset and again with every forecast,** in
+  a column `fill` of the datasets and forecasts tables, so each forecast
+  says how its history was prepared. A reissue must use the same choice.
+- **Iowa liquor sales is set to zero.**
+- **A table made by an earlier version gets new columns added,** not
+  recreated. That is how the existing tables got the `fill` column.
+
 ## Open questions
 
 1. **Who is named as the copyright owner?** Apache 2.0 asks for a short
@@ -279,19 +327,8 @@ The following were chosen while building the storage layer and the ingest on
 6. **Do the minimum history figures of decision 28 hold on real data?**
    Answered: yes, they can stand. See "Storage layer and demo data: results".
 7. **What does a date with no row mean, and must a series cover the whole
-   window?** Measured on the demo data: the current rules keep 29% of stores
-   and 0.2% of store-by-item series, because in order data a week with no
-   row means nothing was ordered, not that the value is unknown. Claude's
-   recommendation, which changes decision 8 and one item of "Things not to
-   repeat", so it is not built:
-   - When a dataset is added, the user says what a date with no row means:
-     zero, for sales and orders, or missing, for measurements. Iowa is zero.
-   - For a zero dataset, a series is zero from its first row to the end of
-     the window and missing before its first row, and it is kept if that
-     stretch is at least the minimum history. Series then have different
-     lengths in one forecast. Timestral takes that: check 3 showed missing
-     values at the start of a history are accepted.
-   - For a missing dataset, nothing changes.
+   window?** Answered by decision 35: the user chooses, and series can have
+   different lengths.
 8. **Add pyarrow to speed up loading slices?** Moving rows from Spark to
    pandas takes most of the 4 to 14 seconds a slice needs. pyarrow is the
    standard way to speed that up and is not in the runtime. Claude's
@@ -886,7 +923,8 @@ Ideas worth carrying over:
 Things not to repeat:
 
 - Storing every cell of an upload as its own database row.
-- Filling missing dates with zero.
+- Filling missing dates with zero without asking. Since decision 35 it is a
+  choice the user makes for each dataset.
 - Numbering series in the order they appear, which changes when data changes.
 - API endpoints with no check on who is calling.
 - Secrets, compiled files and generated outputs committed to the repo.

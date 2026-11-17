@@ -118,13 +118,22 @@ class Store:
         """Create the database and the forecasts and datasets tables, if they are missing."""
         self.spark.sql(f"create database if not exists {_quoted(self.database)}")
         for table, columns in (("forecasts", FORECASTS_TABLE), ("datasets", DATASETS_TABLE)):
-            self._create(table, columns)
+            self.ensure_table(table, columns)
 
-    def _create(self, table: str, columns: Sequence[tuple[str, str]]) -> None:
-        listed = ", ".join(f"{_quoted(name)} {kind}" for name, kind in columns)
-        self.spark.sql(
-            f"create table if not exists {_table(self.database, table)} ({listed}) using iceberg"
-        )
+    def ensure_table(self, table: str, columns: Sequence[tuple[str, str]]) -> None:
+        """Create a table if it is missing, and add any column it does not have yet.
+
+        A table made by an earlier version of this project gets the columns
+        added since. Rows already in it have no value in the new columns.
+        """
+        name = _table(self.database, table)
+        listed = ", ".join(f"{_quoted(column)} {kind}" for column, kind in columns)
+        self.spark.sql(f"create table if not exists {name} ({listed}) using iceberg")
+        present = {field.name for field in self.spark.table(name).schema.fields}
+        for column, kind in columns:
+            if column not in present:
+                self.spark.sql(f"alter table {name} add column {_quoted(column)} {kind}")
+                logger.info("Added the column %s to %s", column, name)
 
     def _append(self, table: str, rows: pd.DataFrame, columns: Sequence[tuple[str, str]]) -> None:
         schema = ", ".join(f"{_quoted(name)} {kind}" for name, kind in columns)
@@ -133,10 +142,19 @@ class Store:
 
     # Datasets
 
-    def save_dataset(self, record: DatasetRecord) -> None:
-        """Save a dataset. Its name must not be in use."""
+    def save_dataset(self, record: DatasetRecord, replace: bool = False) -> None:
+        """Save a dataset. Its name must not be in use, unless `replace` is set.
+
+        With `replace`, a saved dataset of the same name is replaced. Forecasts
+        already made from it are not touched.
+        """
         if any(saved.dataset == record.dataset for saved in self.datasets()):
-            raise ValueError(f"A dataset named {record.dataset} is already saved.")
+            if not replace:
+                raise ValueError(f"A dataset named {record.dataset} is already saved.")
+            self.spark.sql(
+                f"delete from {_table(self.database, 'datasets')} where dataset = :name",
+                args={"name": record.dataset},
+            )
         self._append("datasets", pd.DataFrame([record.to_row()]), DATASETS_TABLE)
         logger.info("Saved the dataset %s on %s", record.dataset, record.source_table)
 
@@ -236,7 +254,7 @@ class Store:
         """
         table = forecast_values_table(dataset.dataset)
         columns = values_table_schema(dataset.dimension_columns)
-        self._create(table, columns)
+        self.ensure_table(table, columns)
         values = issued.values.copy()
         for name in dataset.dimension_columns:
             if name in values.columns:

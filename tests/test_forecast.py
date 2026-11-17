@@ -12,7 +12,7 @@ from u4cast.forecast import issue_forecast, reissue_forecast
 from u4cast.frequency import Frequency
 from u4cast.layout import FORECASTS_TABLE, Kind
 from u4cast.model import StandInForecaster
-from u4cast.prepare import prepare
+from u4cast.prepare import Fill, prepare
 
 
 def issue(panel, **options):
@@ -192,3 +192,46 @@ def test_a_reissue_must_be_of_the_same_slice_layout(monthly_panel):
     )
     with pytest.raises(ValueError, match="same frequency"):
         reissue_forecast(first.record, quarterly, StandInForecaster())
+
+
+def test_the_record_says_how_dates_with_no_row_were_filled():
+    dates = pd.date_range("2023-01-01", periods=36, freq="MS")
+    frame = long_frame(dates, ["A", "B"])
+    frame = frame[~((frame["sku"] == "A") & (frame["date"] == dates[35]))]
+    zero = prepare_units(frame, Frequency.MONTHLY, fill=Fill.ZERO)
+    issued = issue(zero, horizon=2)
+    assert issued.record.fill is Fill.ZERO
+    assert issued.record.to_row()["fill"] == "zero"
+    # A's last month has no row and counts as zero, so the stand-in repeats zero.
+    assert issued.values.loc[issued.values["ts_id"] == "sku=A", "forecast"].tolist() == [0.0, 0.0]
+
+    missing = prepare_units(frame, Frequency.MONTHLY)
+    assert issue(missing).record.fill is Fill.MISSING
+    with pytest.raises(ValueError, match="fill dates with no row the same way"):
+        reissue_forecast(issued.record, missing, StandInForecaster())
+
+
+def test_series_that_start_late_are_forecast_with_the_rest():
+    dates = pd.date_range("2023-01-01", periods=36, freq="MS")
+    frame = long_frame(dates, ["A", "LATE"])
+    frame = frame[~((frame["sku"] == "LATE") & (frame["date"] < dates[10]))]
+    panel = prepare_units(frame, Frequency.MONTHLY)
+    model = StandInForecaster()
+    issued = issue_forecast(
+        panel, model, horizon=3, forecast_name="n", dataset="d", target_column="units"
+    )
+    assert model.calls == [(2, 36, 3)]
+    assert issued.rows.tolist() == [0, 1]
+    assert set(issued.values["ts_id"]) == {"sku=A", "sku=LATE"}
+    # From an earlier end of history, LATE has 20 months, under the minimum of 24.
+    earlier = issue_forecast(
+        panel,
+        model,
+        horizon=3,
+        forecast_name="n",
+        dataset="d",
+        target_column="units",
+        history_steps=30,
+    )
+    assert earlier.rows.tolist() == [0]
+    assert set(earlier.values["ts_id"]) == {"sku=A"}

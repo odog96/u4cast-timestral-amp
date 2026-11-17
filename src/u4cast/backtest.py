@@ -113,7 +113,10 @@ def run_backtest(
 ) -> BacktestResult:
     """Forecast from every cutoff and score the forecasts against the actuals.
 
-    The model is called once per cutoff, with all series together.
+    The model is called once per cutoff, with all series together. A series
+    that starts late is forecast only from the cutoffs by which it has the
+    minimum history. Dates with no row are filled from the history up to the
+    cutoff alone, so nothing from after a cutoff reaches the model.
     """
     cutoffs = backtest_cutoffs(panel, first_cutoff=first_cutoff, step=step, horizon=horizon)
     season = SEASON_LENGTH[panel.frequency]
@@ -133,9 +136,10 @@ def run_backtest(
         )
         forecasts.append(issued)
         part = issued.values.copy()
-        part["actual"] = panel.values[:, history_steps : history_steps + horizon].ravel()
+        rows = issued.rows
+        part["actual"] = panel.actuals[rows, history_steps : history_steps + horizon].ravel()
         part[REFERENCE] = seasonal_reference(
-            panel.values[:, :history_steps], horizon, season
+            panel.history(int(history_steps))[rows], horizon, season
         ).ravel()
         scored_parts.append(part)
     scored = pd.concat(scored_parts, ignore_index=True)
@@ -144,6 +148,8 @@ def run_backtest(
     reference_error = error_metrics_by(scored[TS_ID], scored["actual"], scored[REFERENCE])
     by_series = (
         panel.series.join(model_error, on=TS_ID)
+        .fillna({"n": 0})
+        .astype({"n": int})
         .join(reference_error[list(METRICS)].add_prefix(f"{REFERENCE}_"), on=TS_ID)
         .sort_values(["wape", TS_ID], ascending=[False, True], na_position="last")
         .reset_index(drop=True)

@@ -11,6 +11,7 @@ from u4cast.backtest import backtest_cutoffs, run_backtest, seasonal_reference
 from u4cast.frequency import Frequency
 from u4cast.layout import Kind
 from u4cast.model import StandInForecaster
+from u4cast.prepare import Fill
 
 
 def days(index: pd.DatetimeIndex) -> list[str]:
@@ -160,3 +161,36 @@ def test_weekly_history_under_one_season_has_no_reference():
     assert result.total["mae"] == pytest.approx(2.5)
     assert np.isnan(result.total["reference_mae"])
     assert result.scored["reference"].isna().all()
+
+
+def test_a_series_that_starts_late_is_forecast_only_once_it_has_the_minimum_history():
+    dates = pd.date_range("2023-01-01", periods=36, freq="MS")
+    frame = long_frame(dates, ["A", "B", "C", "LATE"])
+    frame = frame[~((frame["sku"] == "LATE") & (frame["date"] < dates[6]))]
+    panel = prepare_units(frame, Frequency.MONTHLY)
+    assert panel.ts_ids == ["sku=A", "sku=B", "sku=C", "sku=LATE"]
+
+    model = StandInForecaster()
+    result = backtest(panel, model, first_cutoff="2025-01-01", step=5, horizon=6)
+    # By January 2025 LATE has 19 months, under the minimum of 24. By June it has 24.
+    assert model.calls == [(3, 25, 6), (4, 30, 6)]
+    assert [len(issued.values) for issued in result.forecasts] == [3 * 6, 4 * 6]
+    assert set(result.forecasts[0].values["ts_id"]) == {"sku=A", "sku=B", "sku=C"}
+    by_series = result.by_series.set_index("ts_id")
+    assert by_series["n"].to_dict() == {"sku=A": 12, "sku=B": 12, "sku=C": 12, "sku=LATE": 6}
+    # Each scored row carries the actual of its own series.
+    late = result.scored[result.scored["ts_id"] == "sku=LATE"]
+    assert late["actual"].tolist() == [400.0 + i for i in range(30, 36)]
+
+
+def test_a_date_with_no_row_is_scored_as_zero_when_the_dataset_says_so():
+    dates = pd.date_range("2023-01-01", periods=36, freq="MS")
+    frame = long_frame(dates, ["A", "B"])
+    frame = frame[~((frame["sku"] == "A") & (frame["date"] == dates[27]))]
+    result = backtest(prepare_units(frame, Frequency.MONTHLY, fill=Fill.ZERO))
+    by_series = result.by_series.set_index("ts_id")
+    assert by_series.loc["sku=A", "n"] == 12
+    march = result.scored[
+        (result.scored["ts_id"] == "sku=A") & (result.scored["date"] == dates[27])
+    ]
+    assert march["actual"].tolist() == [0.0]

@@ -18,7 +18,7 @@ from typing import Any
 import pandas as pd
 
 from u4cast.frequency import Frequency
-from u4cast.prepare import TS_ID
+from u4cast.prepare import TS_ID, Fill
 
 
 class Kind(enum.StrEnum):
@@ -43,6 +43,7 @@ FORECASTS_TABLE: tuple[tuple[str, str], ...] = (
     ("model_name", "string"),
     ("kind", "string"),
     ("created_at", "timestamp"),
+    ("fill", "string"),  # what a date with no row became: see u4cast.prepare.Fill
 )
 
 DATASETS_TABLE: tuple[tuple[str, str], ...] = (
@@ -52,6 +53,7 @@ DATASETS_TABLE: tuple[tuple[str, str], ...] = (
     ("target_column", "string"),
     ("dimension_columns", "string"),  # a JSON list of column names
     ("frequency", "string"),
+    ("fill", "string"),  # what a date with no row means: see u4cast.prepare.Fill
 )
 
 # The forecast values table has the dataset's dimension columns between
@@ -106,6 +108,12 @@ def forecast_values_table(dataset: str) -> str:
     return f"forecast_values_{slug}"
 
 
+def _fill_of(row: Mapping[str, Any]) -> Fill:
+    """Read `fill` from a stored row. A row stored before the column existed has none."""
+    value = row.get("fill")
+    return Fill(value) if isinstance(value, str) and value else Fill.MISSING
+
+
 def _json_list(values: Sequence[str]) -> str:
     return json.dumps(list(values))
 
@@ -141,6 +149,8 @@ class ForecastRecord:
     created_at: dt.datetime
     slice_filter: Mapping[str, Sequence[Any]] = field(default_factory=dict)
     """Dimension column to the values kept. Empty means the whole dataset."""
+    fill: Fill = Fill.MISSING
+    """What a date with no row in the history became."""
 
     def to_row(self) -> dict[str, Any]:
         """Return the record as a row of the forecasts table."""
@@ -158,6 +168,7 @@ class ForecastRecord:
             "model_name": self.model_name,
             "kind": self.kind.value,
             "created_at": self.created_at,
+            "fill": self.fill.value,
         }
         return {name: row[name] for name, _ in FORECASTS_TABLE}
 
@@ -178,6 +189,7 @@ class ForecastRecord:
             model_name=row["model_name"],
             kind=Kind(row["kind"]),
             created_at=pd.Timestamp(row["created_at"]).to_pydatetime(),
+            fill=_fill_of(row),
         )
 
 
@@ -191,6 +203,9 @@ class DatasetRecord:
     target_column: str
     dimension_columns: tuple[str, ...]
     frequency: Frequency
+    fill: Fill = Fill.MISSING
+    """What a date with no row means in this dataset. The user says so when
+    adding the dataset."""
 
     def to_row(self) -> dict[str, Any]:
         """Return the record as a row of the datasets table."""
@@ -201,6 +216,7 @@ class DatasetRecord:
             "target_column": self.target_column,
             "dimension_columns": _json_list(self.dimension_columns),
             "frequency": self.frequency.value,
+            "fill": self.fill.value,
         }
         return {name: row[name] for name, _ in DATASETS_TABLE}
 
@@ -214,4 +230,5 @@ class DatasetRecord:
             target_column=row["target_column"],
             dimension_columns=tuple(json.loads(row["dimension_columns"])),
             frequency=Frequency(row["frequency"]),
+            fill=_fill_of(row),
         )

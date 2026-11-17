@@ -17,7 +17,7 @@ from u4cast.forecast import issue_forecast, reissue_forecast
 from u4cast.frequency import Frequency
 from u4cast.layout import DatasetRecord, Kind
 from u4cast.model import StandInForecaster
-from u4cast.prepare import prepare
+from u4cast.prepare import Fill, prepare
 from u4cast.storage import Store, spark_session
 
 pytestmark = [
@@ -76,6 +76,7 @@ def panel_of(store, dataset, **options):
         target_column=dataset.target_column,
         dimension_columns=dimension_columns,
         frequency=dataset.frequency,
+        fill=dataset.fill,
     )
 
 
@@ -90,6 +91,36 @@ def test_a_saved_dataset_is_listed_and_its_name_cannot_be_reused(store, dataset)
         store.save_dataset(dataset)
     with pytest.raises(KeyError, match="No dataset named"):
         store.dataset("Other")
+
+
+def test_a_saved_dataset_can_be_replaced_on_request(store, dataset):
+    other = DatasetRecord(
+        dataset="Replaceable",
+        source_table=dataset.source_table,
+        date_column="month",
+        target_column="units",
+        dimension_columns=("sku",),
+        frequency=Frequency.MONTHLY,
+    )
+    store.save_dataset(other)
+    changed = DatasetRecord(**{**other.__dict__, "fill": Fill.ZERO})
+    store.save_dataset(changed, replace=True)
+    assert store.dataset("Replaceable").fill is Fill.ZERO
+    assert [record.dataset for record in store.datasets()] == ["Monthly sales", "Replaceable"]
+    store.spark.sql(f"delete from {store.database}.datasets where dataset = 'Replaceable'")
+
+
+def test_a_table_from_an_earlier_version_gets_the_columns_added_since(store):
+    store.spark.sql(
+        f"create table {store.database}.legacy (dataset string, frequency string) using iceberg"
+    )
+    store.spark.sql(f"insert into {store.database}.legacy values ('old', 'weekly')")
+    store.ensure_table(
+        "legacy", [("dataset", "string"), ("frequency", "string"), ("fill", "string")]
+    )
+    rows = store.spark.table(f"{store.database}.legacy").toPandas()
+    assert rows.columns.tolist() == ["dataset", "frequency", "fill"]
+    assert rows["fill"].isna().all()
 
 
 def test_an_upload_never_replaces_a_table_that_exists(store, dataset):
@@ -152,6 +183,7 @@ def test_a_forecast_is_stored_and_read_back_unchanged(store, dataset):
     assert record.frequency is Frequency.MONTHLY
     assert record.history_end_date == dt.date(2025, 12, 1)
     assert (record.horizon, record.kind, record.model_name) == (12, Kind.FORECAST, "stand-in")
+    assert record.fill is Fill.MISSING
 
     values = store.forecast_values(dataset.dataset, [record.forecast_id])
     expected = issued.values.sort_values(["ts_id", "step"], ignore_index=True)

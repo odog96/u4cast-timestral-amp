@@ -33,6 +33,7 @@ from iowa_download import DATASET_IDS, download
 
 from u4cast.frequency import Frequency
 from u4cast.layout import DatasetRecord
+from u4cast.prepare import Fill
 from u4cast.storage import Store, spark_session
 
 if TYPE_CHECKING:
@@ -151,6 +152,20 @@ def weekly_totals(orders: DataFrame) -> DataFrame:
     )
 
 
+def dataset_record(table: str) -> DatasetRecord:
+    """Return the dataset the application lists for the ingested table."""
+    return DatasetRecord(
+        dataset=DATASET,
+        source_table=table,
+        date_column="week",
+        target_column="bottles",
+        dimension_columns=DIMENSIONS,
+        frequency=Frequency.WEEKLY,
+        # A week with no row is a week in which nothing was ordered.
+        fill=Fill.ZERO,
+    )
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", stream=sys.stdout)
     years = sorted(
@@ -188,17 +203,7 @@ def main() -> None:
         *counts,
     )
 
-    if not any(saved.dataset == DATASET for saved in store.datasets()):
-        store.save_dataset(
-            DatasetRecord(
-                dataset=DATASET,
-                source_table=table,
-                date_column="week",
-                target_column="bottles",
-                dimension_columns=DIMENSIONS,
-                frequency=Frequency.WEEKLY,
-            )
-        )
+    store.save_dataset(dataset_record(table), replace=True)
     spark.stop()
 
 

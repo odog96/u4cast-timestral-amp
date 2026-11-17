@@ -16,6 +16,7 @@ from u4cast.layout import (
     forecast_values_table,
     values_table_schema,
 )
+from u4cast.prepare import Fill
 
 
 def test_forecast_values_table_has_the_dimension_columns_of_its_dataset():
@@ -64,6 +65,7 @@ def test_forecasts_table_columns():
         "model_name",
         "kind",
         "created_at",
+        "fill",
     ]
 
 
@@ -113,7 +115,9 @@ def test_records_survive_being_stored_as_rows():
         target_column="bottles",
         dimension_columns=("store", "item"),
         frequency=Frequency.WEEKLY,
+        fill=Fill.ZERO,
     )
+    assert dataset.to_row()["fill"] == "zero"
     assert DatasetRecord.from_row(dataset.to_row()) == dataset
     forecast = ForecastRecord(
         forecast_id="abc",
@@ -129,5 +133,22 @@ def test_records_survive_being_stored_as_rows():
         model_name="mistralai/Timestral-209M",
         kind=Kind.BACKTEST,
         created_at=dt.datetime(2026, 11, 17, 22, 0, 0),
+        fill=Fill.INTERPOLATE,
     )
     assert ForecastRecord.from_row(forecast.to_row()) == forecast
+
+
+def test_a_row_stored_before_the_fill_column_existed_reads_as_missing():
+    row = DatasetRecord(
+        dataset="old",
+        source_table="demo.old",
+        date_column="week",
+        target_column="units",
+        dimension_columns=("store",),
+        frequency=Frequency.WEEKLY,
+        fill=Fill.ZERO,
+    ).to_row()
+    for absent in (None, float("nan")):
+        assert DatasetRecord.from_row({**row, "fill": absent}).fill is Fill.MISSING
+    del row["fill"]
+    assert DatasetRecord.from_row(row).fill is Fill.MISSING

@@ -25,17 +25,39 @@ TS_ID = "ts_id"
 TOTAL_TS_ID = "total"
 
 
+class Fill(enum.StrEnum):
+    """What a date with no row means for a series. The user chooses it per dataset.
+
+    It applies from a series' first value to the end of the history window.
+    Before its first value a series is always missing: it did not exist yet.
+    """
+
+    MISSING = "missing"
+    """Unknown. The date stays missing and the model works around it."""
+
+    ZERO = "zero"
+    """Nothing happened, as in sales and orders. The date becomes zero."""
+
+    AVERAGE = "average"
+    """The date becomes the average of the series' known values in the window."""
+
+    INTERPOLATE = "interpolate"
+    """The date is put on a straight line between the known values before and
+    after it. After the last known value, that value is repeated."""
+
+    PREVIOUS = "previous"
+    """The date repeats the last known value before it."""
+
+
 class LeftOutReason(enum.StrEnum):
     """Why a series was left out of a forecast."""
 
     NO_VALUES = "no_values"
     """The series has no value on any date of the history window."""
 
-    UNEQUAL_LENGTH = "unequal_length"
-    """The series starts after the window starts, or ends before it ends."""
-
     TOO_SHORT = "too_short"
-    """The history window has fewer steps than the minimum history."""
+    """From its first value to the end of the window, the series has fewer
+    steps than the minimum history."""
 
 
 @dataclass(frozen=True)
@@ -43,7 +65,9 @@ class Panel:
     """The series of one slice on one regular date grid.
 
     `values` has one row per series, in the order of `series`, and one column
-    per date in `dates`. A date with no data is NaN, not zero.
+    per date in `dates`. Series can start at different dates: a series is NaN
+    before its first value. From there on, a date with no row holds what
+    `fill` says.
     """
 
     frequency: Frequency
@@ -53,10 +77,17 @@ class Panel:
     series: pd.DataFrame
     """One row per kept series: `ts_id`, then the dimension columns."""
     values: np.ndarray
-    """Shape (series, steps), 64-bit floats, NaN where a date has no data."""
+    """Shape (series, steps), 64-bit floats, NaN where a value is missing.
+    Dates with no row are filled as `fill` says, using the whole window."""
+    observed: np.ndarray
+    """The same shape, before filling: NaN wherever there is no row."""
+    first_steps: np.ndarray
+    """For each series, the step of its first value."""
+    fill: Fill
     left_out: pd.DataFrame
     """One row per series left out: `ts_id`, the dimension columns, `reason`,
-    `first_date`, `last_date` and `steps` (grid steps from first to last date)."""
+    `first_date`, `last_date` and `steps` (grid steps from its first value to
+    the end of the window)."""
     rows_off_grid: int
     """Rows dropped because their date is missing or not on the grid."""
     minimum_history: int
@@ -72,6 +103,25 @@ class Panel:
     @property
     def n_steps(self) -> int:
         return self.values.shape[1]
+
+    def history(self, steps: int) -> np.ndarray:
+        """Return the first `steps` steps, filled from those steps alone.
+
+        A backtest forecasts from a past cutoff. Filling with an average or a
+        straight line must then not use values from after the cutoff.
+        """
+        if steps == self.n_steps:
+            return self.values
+        return fill_gaps(self.observed[:, :steps], self.first_steps, self.fill)
+
+    @property
+    def actuals(self) -> np.ndarray:
+        """What actually happened, for scoring a backtest.
+
+        A date with no row counts as an actual of zero when the dataset says
+        no row means zero. Otherwise it is unknown and is not scored.
+        """
+        return self.values if self.fill is Fill.ZERO else self.observed
 
 
 def _dimension_text(column: pd.Series) -> pd.Series:
@@ -138,6 +188,7 @@ def prepare(
     history_start: object | None = None,
     history_end: object | None = None,
     minimum_history_override: int | None = None,
+    fill: Fill = Fill.MISSING,
 ) -> Panel:
     """Build the array of series for one forecast.
 
@@ -147,9 +198,10 @@ def prepare(
     it is used. The history window runs from the first to the last date that
     has data within those limits.
 
-    A series is left out, and listed in `Panel.left_out`, when it has no value
-    in the window, when it does not cover the whole window, or when the
-    window is shorter than the minimum history for the frequency.
+    A series' history runs from its first value to the end of the window.
+    `fill` says what a date with no row in that stretch becomes. A series is
+    left out, and listed in `Panel.left_out`, when it has no value in the
+    window or when its history is shorter than the minimum for the frequency.
     """
     dimension_columns = tuple(dimension_columns)
     _require_columns(data, [date_column, target_column, *dimension_columns])
@@ -195,27 +247,25 @@ def prepare(
     cells = observed.groupby([TS_ID, "step"], sort=False)["value"].sum().reset_index()
     spans = cells.groupby(TS_ID)["step"].agg(first="min", last="max").reindex(all_ids)
     has_values = spans["first"].notna()
-    covers_window = has_values & (spans["first"] == 0) & (spans["last"] == n_steps - 1)
+    history_length = n_steps - spans["first"]
+    kept = has_values & (history_length >= lowest_history)
 
     reason = pd.Series(LeftOutReason.TOO_SHORT.value, index=all_ids, dtype=object)
-    reason[~covers_window] = LeftOutReason.UNEQUAL_LENGTH.value
     reason[~has_values] = LeftOutReason.NO_VALUES.value
-    kept = covers_window & (n_steps >= lowest_history)
 
     kept_ids = all_ids[kept.to_numpy()]
     values = np.full((len(kept_ids), n_steps), np.nan, dtype=np.float64)
     row_of = kept_ids.get_indexer(cells[TS_ID])
     in_kept = row_of >= 0
     values[row_of[in_kept], cells["step"].to_numpy()[in_kept]] = cells["value"].to_numpy()[in_kept]
+    first_steps = spans["first"][kept].to_numpy(dtype=np.int64)
 
     left = ~kept.to_numpy()
-    first_step = spans["first"][left]
-    last_step = spans["last"][left]
     left_out = dimensions[left].reset_index()
     left_out["reason"] = reason[left].to_numpy()
-    left_out["first_date"] = _dates_or_missing(calendar, first_step)
-    left_out["last_date"] = _dates_or_missing(calendar, last_step)
-    left_out["steps"] = (last_step - first_step + 1).fillna(0).astype(int).to_numpy()
+    left_out["first_date"] = _dates_or_missing(calendar, spans["first"][left])
+    left_out["last_date"] = _dates_or_missing(calendar, spans["last"][left])
+    left_out["steps"] = history_length[left].fillna(0).astype(int).to_numpy()
 
     logger.info(
         "Prepared %d series of %d %s steps; left out %d series; dropped %d rows off the grid",
@@ -231,11 +281,41 @@ def prepare(
         dates=dates,
         dimension_columns=dimension_columns,
         series=dimensions[kept.to_numpy()].reset_index(),
-        values=values,
+        values=fill_gaps(values, first_steps, fill),
+        observed=values,
+        first_steps=first_steps,
+        fill=fill,
         left_out=left_out,
         rows_off_grid=rows_off_grid,
         minimum_history=lowest_history,
     )
+
+
+def fill_gaps(values: np.ndarray, first_steps: np.ndarray, fill: Fill) -> np.ndarray:
+    """Fill the dates with no row, from each series' first value to the end.
+
+    `values` has shape (series, steps) with NaN where there is no row. Dates
+    before a series' first value are left missing whatever `fill` is.
+    """
+    if fill is Fill.MISSING or values.size == 0:
+        return values
+    steps = np.arange(values.shape[1])
+    gap = np.isnan(values) & (steps[None, :] >= first_steps[:, None])
+    if fill is Fill.ZERO:
+        filled = np.zeros_like(values)
+    elif fill is Fill.AVERAGE:
+        filled = np.broadcast_to(np.nanmean(values, axis=1)[:, None], values.shape)
+    elif fill is Fill.PREVIOUS:
+        last_known = np.maximum.accumulate(np.where(np.isnan(values), 0, steps[None, :]), axis=1)
+        filled = np.take_along_axis(values, last_known, axis=1)
+    else:
+        # A straight line between known values; flat after the last one.
+        filled = (
+            pd.DataFrame(values)
+            .interpolate(method="linear", axis=1, limit_direction="forward")
+            .to_numpy()
+        )
+    return np.where(gap, filled, values)
 
 
 def _dates_or_missing(calendar: Calendar, steps: pd.Series) -> pd.DatetimeIndex:

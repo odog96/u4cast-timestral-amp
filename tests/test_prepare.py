@@ -6,7 +6,7 @@ import pytest
 
 from conftest import long_frame, prepare_units
 from u4cast.frequency import Frequency
-from u4cast.prepare import LeftOutReason, make_ts_ids, prepare
+from u4cast.prepare import Fill, LeftOutReason, make_ts_ids, prepare
 
 MONTHS = pd.date_range("2023-01-01", periods=30, freq="MS")
 
@@ -104,18 +104,87 @@ def test_history_window_limits_the_dates_used():
     assert panel.values[0, 0] == 103.0
 
 
-def test_series_that_do_not_cover_the_window_are_left_out_and_listed():
+def test_series_can_start_at_different_dates():
     frame = long_frame(MONTHS, ["A", "LATE", "EARLY"])
     frame = frame[~((frame["sku"] == "LATE") & (frame["date"] < MONTHS[3]))]
     frame = frame[~((frame["sku"] == "EARLY") & (frame["date"] > MONTHS[25]))]
     panel = prepare_units(frame, Frequency.MONTHLY)
-    assert panel.ts_ids == ["sku=A"]
-    left_out = panel.left_out.set_index("ts_id")
-    assert left_out["reason"].tolist() == [LeftOutReason.UNEQUAL_LENGTH] * 2
-    assert left_out.loc["sku=LATE", "first_date"] == MONTHS[3]
-    assert left_out.loc["sku=LATE", "steps"] == 27
-    assert left_out.loc["sku=EARLY", "last_date"] == MONTHS[25]
-    assert left_out.loc["sku=EARLY", "sku"] == "EARLY"
+    assert panel.ts_ids == ["sku=A", "sku=EARLY", "sku=LATE"]
+    assert panel.first_steps.tolist() == [0, 0, 3]
+    assert len(panel.left_out) == 0
+    # LATE is missing before its first value and complete from there on.
+    assert np.isnan(panel.values[2, :3]).all()
+    assert not np.isnan(panel.values[2, 3:]).any()
+    # EARLY has no row after month 25; by default those dates stay missing.
+    assert np.isnan(panel.values[1, 26:]).all()
+
+
+def test_a_series_needs_the_minimum_history_from_its_first_value():
+    frame = long_frame(MONTHS, ["A", "ENOUGH", "SHORT"])  # 30 months; the minimum is 24
+    frame = frame[~((frame["sku"] == "ENOUGH") & (frame["date"] < MONTHS[6]))]
+    frame = frame[~((frame["sku"] == "SHORT") & (frame["date"] < MONTHS[7]))]
+    panel = prepare_units(frame, Frequency.MONTHLY)
+    assert panel.ts_ids == ["sku=A", "sku=ENOUGH"]
+    (left_out,) = panel.left_out.to_dict("records")
+    assert left_out["ts_id"] == "sku=SHORT"
+    assert left_out["reason"] == LeftOutReason.TOO_SHORT
+    assert left_out["first_date"] == MONTHS[7]
+    assert left_out["last_date"] == MONTHS[29]
+    assert left_out["steps"] == 23
+    assert left_out["sku"] == "SHORT"
+
+
+def gappy_frame() -> pd.DataFrame:
+    """One series that starts at month 2, with values 10, 20, 40 at months 2, 3, 6."""
+    frame = long_frame(MONTHS, ["FULL", "GAPPY"])
+    gappy = frame["sku"] == "GAPPY"
+    frame = frame[~gappy | frame["date"].isin(MONTHS[[2, 3, 6]])].copy()
+    frame.loc[frame["sku"] == "GAPPY", "units"] = [10.0, 20.0, 40.0]
+    return frame
+
+
+@pytest.mark.parametrize(
+    ("fill", "months_2_to_8"),
+    [
+        (Fill.MISSING, [10.0, 20.0, None, None, 40.0, None, None]),
+        (Fill.ZERO, [10.0, 20.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        (Fill.AVERAGE, [10.0, 20.0, 70 / 3, 70 / 3, 40.0, 70 / 3, 70 / 3]),
+        (Fill.INTERPOLATE, [10.0, 20.0, 80 / 3, 100 / 3, 40.0, 40.0, 40.0]),
+        (Fill.PREVIOUS, [10.0, 20.0, 20.0, 20.0, 40.0, 40.0, 40.0]),
+    ],
+)
+def test_the_user_chooses_what_a_date_with_no_row_becomes(fill, months_2_to_8):
+    panel = prepare_units(gappy_frame(), Frequency.MONTHLY, fill=fill)
+    assert panel.fill is fill
+    gappy = panel.values[panel.ts_ids.index("sku=GAPPY")]
+    expected = np.array(months_2_to_8, dtype=float)
+    assert np.allclose(gappy[2:9], expected, equal_nan=True)
+    # Before its first value a series is missing, whatever the choice.
+    assert np.isnan(gappy[:2]).all()
+    # A series with a row on every date is not touched.
+    full = panel.values[panel.ts_ids.index("sku=FULL")]
+    assert full.tolist() == [100.0 + i for i in range(30)]
+
+
+def test_filling_for_a_past_cutoff_uses_nothing_from_after_it():
+    panel = prepare_units(gappy_frame(), Frequency.MONTHLY, fill=Fill.AVERAGE)
+    gappy = panel.ts_ids.index("sku=GAPPY")
+    # Up to month 5 only 10 and 20 are known, so the average is 15, not 70 / 3.
+    assert panel.history(6)[gappy, 2:].tolist() == [10.0, 20.0, 15.0, 15.0]
+    line = prepare_units(gappy_frame(), Frequency.MONTHLY, fill=Fill.INTERPOLATE)
+    # The straight line to month 6 is not known yet: the last value is repeated.
+    assert line.history(6)[gappy, 2:].tolist() == [10.0, 20.0, 20.0, 20.0]
+    assert line.history(30) is line.values
+
+
+def test_a_date_with_no_row_is_an_actual_only_when_it_means_zero():
+    zero = prepare_units(gappy_frame(), Frequency.MONTHLY, fill=Fill.ZERO)
+    gappy = zero.ts_ids.index("sku=GAPPY")
+    assert zero.actuals[gappy, 4] == 0.0
+    for fill in (Fill.MISSING, Fill.AVERAGE, Fill.INTERPOLATE, Fill.PREVIOUS):
+        panel = prepare_units(gappy_frame(), Frequency.MONTHLY, fill=fill)
+        assert np.isnan(panel.actuals[gappy, 4])
+        assert panel.actuals[gappy, 6] == 40.0
 
 
 def test_a_series_with_no_values_is_left_out_and_listed():
