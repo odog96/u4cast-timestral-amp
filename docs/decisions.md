@@ -899,6 +899,45 @@ gave the model only that many weeks of history. The figures are WAPE.
 - A caution for the demo: Mistral does not name the data Timestral was
   trained on, so overlap with this public dataset cannot be ruled out.
 
+### Decision 35 on the demo data
+
+With Iowa set to "no row means zero" and history counted from each series'
+first row, all 252 weeks:
+
+| Summed up to | Series | Kept before | Kept now | Share of bottles kept now |
+| --- | --- | --- | --- | --- |
+| Category | 50 | 44 | 49 | 100% |
+| County | 100 | 98 | 100 | 100% |
+| Vendor | 357 | 83 | 319 | 100% |
+| County by category | 4,744 | 2,458 | 4,708 | 100% |
+| Store | 2,705 | 785 | 2,345 | 98.1% |
+| Item | 9,440 | 1,331 | 7,307 | 98.2% |
+| Store by category, Polk county | 12,690 | 1,411 | 10,749 | 98.1% |
+| Store by item, city of Ames | 33,894 | 75 | 23,676 | 94.3% |
+
+- The series still left out have under 104 weeks since their first row.
+- Fine-grained series are mostly zeros: 77% of the values of the kept
+  store-by-item series are zero, and 36% at store level.
+- **A forecast at store-by-item level works.** 23,676 series of 252 weeks,
+  horizon 13, went through the one-replica endpoint in 566 seconds and gave
+  307,788 rows. 70% of the forecast values are exactly zero.
+- Backtest with zero fill, real model, 1,000 series sampled per level,
+  horizon 13 weeks, four cutoffs 13 weeks apart:
+
+  | Level | WAPE | Reference WAPE | MAE in bottles | Reference MAE |
+  | --- | --- | --- | --- | --- |
+  | County by category | 0.288 | 0.522 | 37.0 | 67.1 |
+  | Store | 0.409 | 0.754 | 103.2 | 190.3 |
+  | Store by item, Ames | 0.753 | 1.487 | 0.46 | 0.91 |
+
+- Timestral's error is about half the reference's at every level. At store
+  by item the WAPE is high because most weeks are zero and the quantities
+  are small: the average error is under half a bottle a week.
+- The store figure is higher than in the earlier table (0.31 to 0.34)
+  because that table held only the 785 stores with orders in every first and
+  last week. This one includes stores that order rarely.
+- Memory in the 3.9 GB session reached 3.3 GB during this run.
+
 ## What the old code did (reference only)
 
 Three private repos were read on 17 November 2026:
@@ -1029,3 +1068,11 @@ Claude Code adds dated lines here.
 - 17 November 2026. The ingest left two things in Oliver's data lake: the
   database `u4cast` and in it the tables `iowa_liquor_weekly`, `datasets`
   and `forecasts`.
+- 17 November 2026. Built decision 35: the user's choice of how a date with
+  no row is filled, and series of different lengths in one forecast. Changed
+  `CLAUDE.md` to match. Why: the old rules lost most fine-grained series of
+  the demo data. 132 tests run without Spark or the weights, 10 against real
+  Spark; all pass.
+- 17 November 2026. Open question 7 is answered by decision 35. The tables
+  `datasets` and `forecasts` in the database `u4cast` got a `fill` column,
+  and the Iowa dataset is set to zero.
