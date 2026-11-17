@@ -112,8 +112,11 @@ are in this file, which loads with this one:
   not zero. Timestral accepts NaN as missing.
 - All series in a dataset must have the same history length. A series that
   does not is left out and listed for the user.
-- Minimum history per series: 32 time steps, enforced. A series with less is
-  left out and listed for the user.
+- Minimum history per series, enforced, depends on the frequency: 24 time
+  steps for monthly data, 8 for quarterly and 104 for weekly (two years in
+  each case), and 32 for daily. The user can override the weekly minimum down
+  to 32. A series with less is left out and listed for the user. Decision 27
+  in `docs/decisions.md` gives the reasons.
 - The user can choose the history window, meaning the first and last date of
   history a forecast uses. The default is all of it.
 
@@ -191,9 +194,12 @@ tables. The application never writes to a history table.
 - AMP packaging: a `.project-metadata.yaml` file in the repo root whose steps
   install dependencies, build the front end, download the model weights, ingest
   the demo data, deploy the workbench model, and start the application.
-- Downloading the weights from Hugging Face needs a signed-in account. Take the
-  access token from an environment variable the user fills in when installing
-  the AMP.
+- Downloading the weights from Hugging Face worked without signing in when
+  tested on 17 November 2026. The AMP still offers an environment variable for
+  a Hugging Face access token, and it is optional: when the user fills it in,
+  the download uses it.
+- Resource profile for the application and for the workbench model: 4 vCPU
+  and 8 GB of memory each.
 - The application must listen on the port Cloudera AI assigns (environment
   variable `CDSW_APP_PORT`, address `127.0.0.1`). Verify this in the target
   environment before relying on it.
@@ -205,7 +211,7 @@ tables. The application never writes to a history table.
 
 ## Engineering standards
 
-- Python 3.11. Dependencies in `pyproject.toml` with a lock file.
+- Python 3.12. Dependencies in `pyproject.toml` with a lock file.
 - The forecasting code is a package under `src/` that knows nothing about the
   web server or the front end. The web server calls the package.
 - Type hints on public functions. `ruff` for linting and formatting.

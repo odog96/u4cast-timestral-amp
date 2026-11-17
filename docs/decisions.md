@@ -85,7 +85,8 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
     the user can choose; keeping every reissue of a forecast; a view of
     several forecasts' predictions for the same date next to what happened.
 
-23. **Minimum history is 32 time steps, enforced.** Oliver: "if Timestral
+23. **Minimum history is 32 time steps, enforced.** (Replaced by decision 27.)
+    Oliver: "if Timestral
     requires 32 steps, then that is what we enforce - full stop." What is
     known: Timestral's README states no minimum, and a secondary source
     (marktechpost.com) says it reads history in blocks of 32 steps. So 32 is
@@ -106,6 +107,39 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
     the standard Apache 2.0 text, unchanged. It lets anyone use, change and
     share the code. It does not cover the Timestral weights, which have
     Mistral's own license (decision 12).
+
+Decisions 27 to 30 were made by Oliver on 17 November 2026 in a Claude Code
+session, after reading the results of first build checks 1 to 5.
+
+27. **Minimum history depends on the frequency, and the user can override
+    it.** This replaces decision 23. Oliver: "min of 2 cycles and a min of 32
+    observations, but let them override (they know their business better than
+    anyone so an override should let them use 32". The message was cut off
+    there, so the table below is Claude's reading of it; see open question 6.
+
+    | Frequency | Default minimum | With the user's override |
+    | --- | --- | --- |
+    | Monthly | 24 steps (two years) | no change |
+    | Quarterly | 8 steps (two years) | no change |
+    | Weekly | 104 steps (two years) | can go down to 32 |
+    | Daily | 32 steps | no change |
+
+    Reason: check 5 showed that 32 steps is not a requirement of Timestral,
+    and that error depends on whether the history holds two seasonal cycles.
+    Two years of monthly history, as in decision 19's example, is now
+    accepted. The override exists because the user knows whether their weekly
+    data has a yearly pattern worth waiting two years for.
+28. **The Hugging Face access token is optional.** This changes decision 20.
+    Reason: the weights downloaded with no sign-in. The AMP keeps the field
+    because Hugging Face gives lower rate limits to requests without a token.
+29. **Python 3.12.** `CLAUDE.md` said 3.11. Reason: the Cloudera AI runtime in
+    use has 3.12, and Timestral works on it.
+30. **Resource profile: 4 vCPU and 8 GB of memory, for the application and for
+    the workbench model.** Oliver asked whether that is plenty and asked
+    Claude to recommend. Claude's answer: yes. The loaded model needs about 1
+    GB and stays under 3 GB with batches of 500 series, and 500 series of 200
+    steps took 11.5 seconds on 4 threads. To be looked at again if the
+    application runs Spark in the same container.
 
 ## Proposed by Claude, not yet confirmed by Oliver
 
@@ -155,30 +189,13 @@ different frequencies. The full goal statement is in `CLAUDE.md` under "Goal".
    and `npm` are not installed in the runtime the first checks ran in
    (JupyterLab, Python 3.12, version 2026.08). Check 6 still has to settle it
    for the runtime the AMP will use.
-6. **Keep the 32-step minimum history, or change it?** Decision 23 enforces 32
-   until the first build checks show what Timestral does with less. They now
-   have: it runs with any length from 1 step, and error does not change at 32.
-   What matters is how many seasonal cycles the history holds: with two or
-   more, Timestral beat the reference of repeating the last cycle; with fewer,
-   it did not. Claude's recommendation: require two seasonal cycles for
-   monthly data (24 months) and quarterly data (8 quarters), which would
-   accept the two years of monthly history in decision 19's example, and keep
-   32 for daily and weekly data. The evidence is synthetic data only, so
-   confirm on the demo data's backtest. Until Oliver decides, 32 stays
-   enforced.
-7. **Is the Hugging Face access token required, or optional?** The weights
-   downloaded with no token and no sign-in on 17 November 2026, which differs
-   from decision 20. Hugging Face printed a notice that requests without a
-   token get lower rate limits. Claude's recommendation: keep the AMP's token
-   field but make it optional.
-8. **Python 3.11 or 3.12?** `CLAUDE.md` says 3.11. The runtime the first checks
-   ran in has Python 3.12.13, and Timestral works on it. Oliver to say
-   whether a 3.11 runtime will be used or the standard changes to 3.12.
-9. **Which resource profile do the application and the workbench model get?**
-   The first checks ran in 2 vCPU and 3,933 MB. The loaded model needs about
-   1 GB, and each call adds about 0.5 GB per 1,000 series of 200 steps. Speed
-   scales with processor threads: 500 series of 200 steps took 21 seconds on
-   2 threads and 6.6 seconds on 8.
+6. **Is Claude's reading of decision 27 right?** Two points are Claude's
+   reading of a message that was cut off. First, that weekly data needs 104
+   steps by default; Claude's recommendation before the decision had been to
+   keep 32 for weekly. Second, that the override can lower the minimum only
+   to 32, and only for weekly data. Both are settings and easy to change.
+   Also still open: the evidence is synthetic data only, so the minimums
+   should be checked against the demo data's backtest.
 
 ## Demo dataset comparison (17 November 2026)
 
@@ -545,4 +562,13 @@ Claude Code adds dated lines here.
 - 17 November 2026. One call of 5,000 series (part of check 4) was not run,
   because it does not fit in the session's 3,933 MB. It was timed as batches
   instead.
+- 17 November 2026. Oliver answered the open questions that were numbered 6
+  to 9. They are now decisions 27 to 30 and were removed from "Open
+  questions". `CLAUDE.md` was changed to match: the minimum history rule, the
+  optional Hugging Face token, Python 3.12, and the resource profile.
+- 17 November 2026. Decision 23 (32 steps for every frequency) is replaced by
+  decision 27. Why: check 5 showed 32 is not a requirement of the model.
+- 17 November 2026. Added a new open question 6. Why: Oliver's message on the
+  minimum history was cut off, and two points of decision 27 are Claude's
+  reading of it.
 
