@@ -163,6 +163,40 @@ session, after reading the results of first build checks 1 to 5.
 - Leave out and list a series that has no values at all in the chosen history
   window. Timestral returns a flat zero forecast for it with no error.
 
+The following were chosen while building the forecasting package on 17
+November 2026. Each is a small, separate piece of code and easy to change.
+
+- **Form of `ts_id`:** `column=value` for each dimension column, joined by
+  `|`, for example `store=2633|category=VODKA`. A dataset with no dimension
+  columns has one series called `total`.
+- **What "the same history length" means in practice:** the history window
+  runs from the first to the last date that has data in the slice. A series
+  is kept only if it has a value on both the first and the last date of the
+  window. Dates in between with no data become NaN.
+- **The date grid follows the dataset's own pattern:** its usual weekday for
+  weekly data, and for monthly and quarterly data either the last day of the
+  month or its usual day of the month. A row whose date is off that grid is
+  dropped and counted, and the count is reported with the forecast.
+- **Rows of the same series and date are summed.** This matches summing up to
+  the chosen dimension columns.
+- **Season lengths for the reference comparison:** 7 steps for daily data, 52
+  for weekly, 12 for monthly, 4 for quarterly.
+- **Backtest details:** every cutoff uses all history from the start of the
+  window to the cutoff. A cutoff is used only if a full horizon of actuals
+  follows it. A date with no actual is not scored.
+- **MAPE and WAPE are stored as ratios,** for example 0.138 for 13.8%. The
+  interface shows them as percents.
+- **If the model does not offer the 0.1 or 0.9 quantile,** the nearest level
+  it offers is used.
+- **`forecast_id` is a random identifier** (a UUID). Creation time is in UTC.
+- **In the forecasts and datasets tables, the list of dimension columns and
+  the slice filter are stored as JSON text.** The storage layer may change
+  this when the tables are created.
+- **Setting names:** `U4CAST_MODEL_NAME` and `U4CAST_BATCH_SIZE`.
+- **Tooling:** `uv` for the lock file (`uv.lock`). torch and Timestral are an
+  optional extra called `model`, so the tests install and run without them.
+  torch comes from the CPU-only index.
+
 ## Open questions
 
 1. **Who is named as the copyright owner?** Apache 2.0 asks for a short
@@ -196,6 +230,20 @@ session, after reading the results of first build checks 1 to 5.
    to 32, and only for weekly data. Both are settings and easy to change.
    Also still open: the evidence is synthetic data only, so the minimums
    should be checked against the demo data's backtest.
+7. **Should the default history window keep the most series?** The default
+   window is all of the history, as `CLAUDE.md` says. With that default, one
+   series that starts earlier than the rest causes every other series to be
+   left out for starting late, and on daily data a series is left out if it
+   has no value on the very first or very last day. Claude's recommendation:
+   keep the rule, and have the interface show how many series each choice of
+   start date keeps, so the user can move the start. To be checked on the
+   demo data before the interface is built.
+8. **Who turns transactions into a regular frequency?** The forecasting
+   package does not change the frequency of the data: rows must already be
+   daily, weekly, monthly or quarterly. Iowa liquor sales is one row per
+   order line. Claude's recommendation: the demo ingest step writes the
+   Iceberg table as weekly totals per store and item, and the application
+   does not offer a change of frequency in version one.
 
 ## Demo dataset comparison (17 November 2026)
 
@@ -571,4 +619,26 @@ Claude Code adds dated lines here.
 - 17 November 2026. Added a new open question 6. Why: Oliver's message on the
   minimum history was cut off, and two points of decision 27 are Claude's
   reading of it.
+- 17 November 2026. Built the forecasting package `u4cast` under `src/` with
+  its tests: frequency detection and the date grid, data preparation,
+  the model interface, issuing and reissuing forecasts, backtests, error
+  measures and the layout of the stored tables. 99 tests run without the
+  weights. One more test runs the real model on 100 series of 32 steps and is
+  skipped unless `U4CAST_TEST_WEIGHTS=1` is set; it passed.
+- 17 November 2026. The model interface has two implementations so far:
+  Timestral loaded in the same process, and a stand-in for tests that repeats
+  each series' last value. The implementation that calls a workbench model
+  endpoint is not built. Why: it depends on the endpoint's request format
+  and limits, which check 6 has to find.
+- 17 November 2026. Recorded the choices made while building the package in
+  "Proposed by Claude", and added open questions 7 (the default history
+  window can leave out most series) and 8 (the package does not change the
+  frequency of the data, so the ingest has to). Why: both came up in the
+  code and neither is settled by `CLAUDE.md`.
+- 17 November 2026. The lock file resolved pandas to 3.1, where text columns
+  and some arrays behave differently from pandas 2. The package is written
+  for both. To be checked again when Spark hands data to pandas.
+- 17 November 2026. Added `.gitignore`. Why: in a Cloudera AI session the
+  project folder is also the home folder, so the weights cache, tool
+  settings and sign-in files sit next to the code.
 
