@@ -141,6 +141,23 @@ session, after reading the results of first build checks 1 to 5.
     steps took 11.5 seconds on 4 threads. To be looked at again if the
     application runs Spark in the same container.
 
+Decisions 31 to 33 were made by Oliver on 17 November 2026 in the same Claude
+Code session, after the forecasting package was built.
+
+31. **The table in decision 27 is confirmed.** Weekly data needs 104 steps by
+    default, and the user's override can lower that to 32. The override
+    applies to weekly data only.
+32. **The demo ingest writes weekly totals per store and item.** The
+    application does not change the frequency of a dataset in version one:
+    the rows of a dataset must already be daily, weekly, monthly or
+    quarterly. Reason: Iowa liquor sales is one row per order line, and the
+    forecasting package works on a regular frequency.
+33. **The default history window stays all of the history, and the interface
+    shows how many series each choice of start date keeps.** Reason: with
+    series that start at different dates, the default leaves out every
+    series that starts later than the earliest one. The user moves the start
+    date; the rule that all series cover the whole window does not change.
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -223,27 +240,14 @@ November 2026. Each is a small, separate piece of code and easy to change.
    and `npm` are not installed in the runtime the first checks ran in
    (JupyterLab, Python 3.12, version 2026.08). Check 6 still has to settle it
    for the runtime the AMP will use.
-6. **Is Claude's reading of decision 27 right?** Two points are Claude's
-   reading of a message that was cut off. First, that weekly data needs 104
-   steps by default; Claude's recommendation before the decision had been to
-   keep 32 for weekly. Second, that the override can lower the minimum only
-   to 32, and only for weekly data. Both are settings and easy to change.
-   Also still open: the evidence is synthetic data only, so the minimums
-   should be checked against the demo data's backtest.
-7. **Should the default history window keep the most series?** The default
-   window is all of the history, as `CLAUDE.md` says. With that default, one
-   series that starts earlier than the rest causes every other series to be
-   left out for starting late, and on daily data a series is left out if it
-   has no value on the very first or very last day. Claude's recommendation:
-   keep the rule, and have the interface show how many series each choice of
-   start date keeps, so the user can move the start. To be checked on the
-   demo data before the interface is built.
-8. **Who turns transactions into a regular frequency?** The forecasting
-   package does not change the frequency of the data: rows must already be
-   daily, weekly, monthly or quarterly. Iowa liquor sales is one row per
-   order line. Claude's recommendation: the demo ingest step writes the
-   Iceberg table as weekly totals per store and item, and the application
-   does not offer a change of frequency in version one.
+6. **Do the minimum history figures of decision 27 hold on real data?** They
+   rest on synthetic data only. To be checked against the demo data's
+   backtest once the demo data is ingested.
+7. **How many series does the equal-length rule leave out on the demo data?**
+   A series is kept only if it has a value on the first and on the last date
+   of the history window. On weekly store-by-item data many series may fail
+   that. To be measured once the demo data is ingested, before the interface
+   is built.
 
 ## Demo dataset comparison (17 November 2026)
 
@@ -641,4 +645,11 @@ Claude Code adds dated lines here.
 - 17 November 2026. Added `.gitignore`. Why: in a Cloudera AI session the
   project folder is also the home folder, so the weights cache, tool
   settings and sign-in files sit next to the code.
+- 17 November 2026. Oliver confirmed Claude's reading of decision 27 and
+  accepted two recommendations. They are decisions 31 to 33. The open
+  questions that were numbered 6, 7 and 8 are replaced by two checks to run
+  on the demo data. `CLAUDE.md` was changed to match.
+- 17 November 2026. Oliver gave the go-ahead to run first build check 6,
+  which deploys a model in his Cloudera AI workspace, and to merge the work
+  so far into `main` and push it to GitHub.
 

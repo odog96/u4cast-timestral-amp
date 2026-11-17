@@ -94,7 +94,10 @@ are in this file, which loads with this one:
 - Two sources: an Iceberg table (Iceberg is the table format of Cloudera's
   data lake), and CSV upload.
 - The demo data is ingested into an Iceberg table with Spark by an AMP step.
-  Cap what is pulled in at 1 to 5 GB.
+  Cap what is pulled in at 1 to 5 GB. The ingest writes weekly totals per
+  store and item.
+- The application does not change the frequency of a dataset. The rows of a
+  dataset must already be daily, weekly, monthly or quarterly.
 - The full table stays in Iceberg. A forecast is made for a slice of it: the
   series the user selects by filtering on dimension values, over the history
   window the user selects. Apply the filter and any summing up to the chosen
@@ -176,6 +179,9 @@ tables. The application never writes to a history table.
 - Interface quality is a goal. See "Goal".
 - Screens, in order: add a dataset, pick its columns, select a slice, create a
   forecast, explore the result, download.
+- Where the user picks the history window, show how many series each choice
+  of start date keeps, because a series that does not cover the whole window
+  is left out.
 - Explore shows a chart of history, forecast and range, either for the total of
   all series or for one combination of dimension values.
 - With many series, give a searchable picker for one series and a table of
