@@ -425,14 +425,9 @@ the application on 18 November 2026.
    standard way to speed that up and is not in the runtime. Claude's
    recommendation: add it as a dependency and measure. Less pressing since
    decision 36: a slice of the clean demo table loads in 3 seconds.
-9. **What should the demo say about accuracy?** On the worked example, 88
-   vodka SKUs in Polk county, Timestral's backtest error equals that of
-   repeating the value of a year earlier: WAPE 0.287 against 0.289. On 833
-   Polk SKUs it was 0.301 against 0.309. So at the level of a single SKU and
-   month, on this data, the model is no better than the reference. It was
-   clearly better at coarser levels (see "Decision 35 on the demo data").
-   Claude's recommendation: show accuracy in the demo as the honest check it
-   is, and choose the slice knowing this.
+9. **What should the demo say about accuracy?** Answered by the test of 18
+   November 2026, in "Accuracy by level of detail". In short: show a short
+   horizon, and show weekly data. Oliver decides which examples to show.
 10. **Has the AMP been installed from scratch?** No. `.project-metadata.yaml`
     parses and lists six steps. Run in this project on 18 November 2026:
     steps 1 to 4, where step 4 ran the ingest as a Cloudera AI job with the
@@ -443,6 +438,11 @@ the application on 18 November 2026.
 11. **Why do Claude Code's sessions keep ending?** Seven ended during this
     work, several while a second Spark was running next to other work. No
     log shows the cause. It may be memory.
+12. **Should the accuracy screen let the user leave dates out?** It scores
+    over all dates, so one unusual stretch can decide the figure it shows,
+    in either direction. Claude's recommendation: yes, as part of the
+    deferred "Anomaly adjustment", after the demo. For the demo, show the
+    weekly SKU examples, where the result does not depend on it.
 
 ## Demo dataset comparison (17 November 2026)
 
@@ -1112,6 +1112,128 @@ first row, all 252 weeks:
   libraries unpacked into `.timestral-checks/syslibs`). It is not in git.
 - `.timestral-checks/serve.sh start` runs the server on port 8123 for tests.
 
+## Accuracy by level of detail: results (18 November 2026)
+
+Oliver asked where the sweet spot is: "maybe sku is not accurate, but
+perhaps whiskeys or beers are, or maybe sku by region." Every level the demo
+tables support was backtested with the real model through the endpoint.
+
+How it was done: the forecast is made from past dates, as if the later
+history were not known, and compared with what happened. Monthly table: from
+December 2023 on, a past date every 3 months, 8 to 11 of them. Weekly table:
+from 104 weeks of history on, a past date every 13 weeks, 10 to 12 of them.
+The figures are WAPE, the sum of absolute errors divided by the sum of
+actuals. The reference repeats the value of a year earlier.
+
+### The answer in short
+
+- **Adding series together lowers everyone's error, and removes the model's
+  advantage.** For all of Iowa, a category or a county, by month, the error
+  is under 11% and repeating last year is as good as Timestral or better.
+- **Timestral's advantage is at the fine-grained levels.** A SKU in a county
+  by month: 24% against 28%. A SKU by week: 18% against 24% four weeks
+  ahead, and 20% against 23% thirteen weeks ahead, where it beat the
+  reference from 10 of 11 past dates.
+- **So the sweet spot is the many small series, over a short horizon.** That
+  is also what the application is for: thousands of series nobody can look
+  at one by one. At the top, last year's number is hard to beat.
+- **The two unusual stretches in the data decide a careless comparison.**
+  Scored over all dates, Timestral looked about 20% better at every level.
+  Most of that was the reference repeating the one-off of August to October
+  2025 into 2026. The figures above leave those months out.
+
+### Without the unusual months
+
+Left out of the scoring: dates in December 2022 or August to October 2025,
+and dates one year after them, where the reference repeats them. That is
+15% to 17% of the scored dates. "Won" counts the past dates from which
+Timestral's error was the lower one.
+
+Monthly table, 58 months:
+
+| One series per | Series | 3 months ahead | 12 months ahead |
+| --- | --- | --- | --- |
+| All of Iowa | 1 | 8.2% against 4.8%, won 4 of 11 | 6.7% against 4.4%, won 0 of 8 |
+| Category | 42 | 10.6% against 8.1%, won 4 of 11 | 10.1% against 7.9%, won 0 of 8 |
+| County | 98 | 10.6% against 9.3%, won 6 of 11 | 9.8% against 9.4%, won 5 of 8 |
+| SKU | 930 | 16.6% against 16.3%, won 8 of 11 | 17.3% against 15.9%, won 7 of 8 |
+| SKU and county | 1,500 of 6,892 | 24.0% against 28.4%, won 9 of 11 | 24.9% against 28.2%, won 7 of 8 |
+
+Weekly table, 252 weeks:
+
+| One series per | Series | 4 weeks ahead | 13 weeks ahead |
+| --- | --- | --- | --- |
+| All of Iowa | 1 | 7.3% against 8.1%, won 6 of 10 | 11.0% against 7.6%, won 6 of 11 |
+| Category | 39 | 11.7% against 14.7%, won 8 of 10 | 13.7% against 13.8%, won 10 of 11 |
+| SKU | 300 | 18.2% against 24.4%, won 10 of 10 | 20.0% against 23.2%, won 10 of 11 |
+
+- Weekly categories, 13 weeks ahead, show how one date can decide a total.
+  From nine ordinary past dates Timestral scored 9.5% to 11.3% and the
+  reference 10.6% to 14.0%. From the date just after the unusual stretch
+  (22 September 2025) Timestral scored 41.9% and the reference 20.1%.
+- SKU by month, 12 months ahead, is the same: Timestral won from 7 of 8 past
+  dates and still has the higher total.
+
+### Over all dates, unusual months included
+
+Monthly table:
+
+| One series per | Series | 3 months ahead | 6 months ahead | 12 months ahead |
+| --- | --- | --- | --- | --- |
+| All of Iowa | 1 | 12.5% against 16.0% | 13.2% against 13.9% | 14.0% against 14.0% |
+| Category | 42 | 14.7% against 18.6% | 15.8% against 16.6% | 16.9% against 16.7% |
+| Vendor | 55 | 14.9% against 18.3% | 15.9% against 16.3% | 16.9% against 16.4% |
+| County | 98 | 14.9% against 19.6% | 15.7% against 17.7% | 16.7% against 17.8% |
+| County and category | 1,195 | 19.8% against 25.1% | 20.6% against 23.2% | 21.6% against 23.2% |
+| SKU | 930 | 20.5% against 25.5% | 21.6% against 23.5% | 23.0% against 23.2% |
+| SKU and county | 2,500 of 6,892 | 28.6% against 36.8% | 29.6% against 35.0% | 30.9% against 34.6% |
+
+Weekly table:
+
+| One series per | Series | 4 weeks ahead | 13 weeks ahead | 26 weeks ahead |
+| --- | --- | --- | --- | --- |
+| All of Iowa | 1 | 9.8% against 15.6% | 16.0% against 18.2% | 15.4% against 16.1% |
+| Category | 39 | 14.0% against 21.3% | 18.4% against 23.3% | 18.7% against 21.2% |
+| Vendor | 31 | 14.4% against 20.9% | 18.6% against 22.9% | 19.0% against 20.8% |
+| SKU | 300 | 20.5% against 30.0% | 24.0% against 31.1% | 24.7% against 29.1% |
+
+The accuracy screen of the application scores over all dates, like these
+two tables. It has no way to leave dates out.
+
+### What an unusual stretch does to each method
+
+- A forecast made just after the stretch carries it forward: Timestral reads
+  the doubled months as the new level and is far too high for a quarter.
+- A year later the reference repeats the stretch, and is far too high then.
+- A forecast made before the stretch misses it, whichever method.
+- Taking a known shock out of history is the deferred item "Anomaly
+  adjustment". This data is a case for it.
+
+### Cautions
+
+- These are figures on this data. Mistral does not name the data Timestral
+  was trained on, so overlap with this public dataset cannot be ruled out.
+- The totals in these tables are totals of the kept, complete series.
+- SKU and county was scored on a random sample of its 6,892 series.
+- The first version of this section, written before the unusual months were
+  separated out, said Timestral was about 20% better at every level three
+  months ahead. That was wrong as a general statement and is corrected here.
+
+### Worked examples stored in the application
+
+Each has an accuracy check, and all but one leave the latest date open to be
+reissued live. "In the application" is the error its accuracy screen shows,
+over all dates, against the reference's.
+
+| Dataset | Forecast | Series | In the application | What it shows |
+| --- | --- | --- | --- | --- |
+| Weekly | SKUs, 4 weeks ahead | 300 | 19.4% against 37.3% | The strongest case |
+| Weekly | SKUs, 13 weeks ahead | 300 | 21.7% against 29.1% | The sweet spot |
+| Weekly | Categories, 13 weeks ahead | 39 | 16.1% against 21.4% | Summed up; the gap is mostly the unusual months |
+| Monthly | All SKUs by county, 3 months ahead | 6,892 | 30.3% against 48.4% | Volume; the gap is inflated by the unusual months |
+| Monthly | Counties, 3 months ahead | 98 | 18.2% against 16.1% | Summed up: last year's number wins |
+| Monthly | Polk county vodka | 88 | 28.7% against 28.9% | 12 months ahead: a tie |
+
 ## What the old code did (reference only)
 
 Three private repos were read on 17 November 2026:
@@ -1274,3 +1396,12 @@ Claude Code adds dated lines here.
 - 18 November 2026. Added the AMP packaging (`.project-metadata.yaml` and
   `amp/`) and the README. Order of work step 5 is written; open question 10
   says what of it was run.
+- 18 November 2026. Tested accuracy at every level of detail, at Oliver's
+  request. Results are in "Accuracy by level of detail". Open question 9 is
+  answered: Timestral's advantage is at the fine-grained levels and short
+  horizons; summed up, repeating last year is as good or better.
+- 18 November 2026. Corrected a first reading of that test, which had
+  Timestral about 20% better at every level. Why: most of that gap came
+  from the reference repeating a one-off stretch of the data a year later.
+- 18 November 2026. Stored five more worked examples in the application, at
+  the levels the test covers. Added open question 12.
