@@ -110,6 +110,10 @@ def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
     def dataset(name: str) -> dict[str, Any]:
         return workspace.dataset_overview(name)
 
+    @app.get("/api/datasets/{name}/history")
+    def history(name: str, target: str | None = None) -> dict[str, Any]:
+        return workspace.history(name, target or None)
+
     @app.get("/api/datasets/{name}/dimensions/{column}")
     def dimension_values(name: str, column: str) -> list[Any]:
         return workspace.dimension_values(name, column)

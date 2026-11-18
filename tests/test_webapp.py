@@ -450,11 +450,22 @@ def test_a_forecast_chooses_which_number_to_forecast(tmp_path):
     assert last_actual("Revenue") == pytest.approx(10 * last_actual("Monthly demand"))
 
     # A reissue and the accuracy check keep the forecast's own number.
-    again = client.post("/api/datasets/Sales/forecasts/Revenue/reissue", json={"as_of": "2024-12-01"})
+    again = client.post(
+        "/api/datasets/Sales/forecasts/Revenue/reissue", json={"as_of": "2024-12-01"}
+    )
     assert finish(client, again)["state"] == "done"
     assert store.saved_forecasts[-1].target_column == "dollars"
     accuracy = client.get("/api/datasets/Sales/forecasts/Revenue/accuracy").json()
     assert accuracy["target"] == "dollars"
+
+    # The history of the whole dataset, for either number.
+    bottles = client.get("/api/datasets/Sales/history").json()
+    dollars = client.get("/api/datasets/Sales/history?target=dollars").json()
+    assert (bottles["target"], dollars["target"]) == ("bottles", "dollars")
+    assert len(bottles["dates"]) == 40
+    assert bottles["dates"][0] == "2022-01-01"
+    assert bottles["values"][0] == 2 * (100 + 200 + 300)
+    assert dollars["values"] == [10 * value for value in bottles["values"]]
 
     refused = client.post(
         "/api/datasets/Sales/slice",
@@ -477,6 +488,8 @@ def test_new_rows_in_the_history_table_are_noticed(client, store, monkeypatch):
     assert client.get("/api/datasets/Sales").json()["dates"][-1] == "2025-05-01"
     overview = client.get("/api/datasets/Sales/forecasts/Monthly demand").json()
     assert overview["reissue_dates"][-1] == "2025-05-01"
-    job = finish(client, client.post("/api/datasets/Sales/forecasts/Monthly demand/reissue", json={}))
+    job = finish(
+        client, client.post("/api/datasets/Sales/forecasts/Monthly demand/reissue", json={})
+    )
     assert job["state"] == "done", job
     assert store.saved_forecasts[-1].history_end_date == dt.date(2025, 5, 1)

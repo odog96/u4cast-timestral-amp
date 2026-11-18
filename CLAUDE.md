@@ -108,6 +108,9 @@ are in this file, which loads with this one:
   sent to the model. A slice can be as small as 100 series of 32 time steps.
 - The user picks the date column, the target column (the value to forecast)
   and the dimension columns (for example store, category, SKU).
+- The target column picked with a dataset is its default. Each forecast can
+  name another number column of the table, chosen on the forecast screen.
+  Decision 37 in `docs/decisions.md` gives the reasons.
 - Frequencies: daily, weekly, monthly, quarterly. Nothing finer than daily.
   Detect the frequency from the dates and ask the user to confirm it.
 - Each unique combination of dimension values is one series, identified by

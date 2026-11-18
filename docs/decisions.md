@@ -190,6 +190,18 @@ Decision 36 was made by Oliver on 18 November 2026 in a Claude Code session.
     does not depend on it. This changes decision 33: which cuts are clean
     was left to Claude and is listed under "Proposed by Claude".
 
+Decision 37 was made by Oliver on 18 November 2026 in a Claude Code session,
+after his first look at the running application.
+
+37. **The number to forecast is chosen for each forecast, and forecasting is
+    what the application leads with.** Oliver: "The idea is flexibility,
+    where I come in, add a data set, I designate the target to be forecast,
+    that is the column, and then off you go." And: "A lot of time is spent
+    curating data sets, which is nice, but seems to miss the whole point."
+    Before this, the number was fixed when a dataset was added, so the Iowa
+    data could be forecast in bottles only. How it is built is Claude's and
+    is listed under "Proposed by Claude".
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -316,6 +328,16 @@ November 2026.
 - **Iowa liquor sales is set to zero.**
 - **A table made by an earlier version gets new columns added,** not
   recreated. That is how the existing tables got the `fill` column.
+
+The following are the details of decision 37, chosen on 18 November 2026.
+
+- **Any number column of the table can be forecast,** except the date and
+  the columns that tell series apart. The forecasts table already had the
+  column `target_column`; it now differs between forecasts of one dataset.
+- **Forecasts of different numbers share the dataset's values table.** The
+  forecast's row in the forecasts table says which number its values are.
+- **A forecast name is offered,** made from the number and the horizon, for
+  example "Dollars, 12 months ahead".
 
 The following follow from decision 36 and were chosen on 18 November 2026.
 
@@ -1411,3 +1433,18 @@ Claude Code adds dated lines here.
   the application were, and they were only in a chat message. The CSV
   upload was run through the running application: the table was created and
   its columns and frequency were detected. The test table was dropped.
+
+- 18 November 2026. Decision 37. A forecast names its own number column;
+  the one chosen with the dataset is the default. A reissue and the
+  accuracy check keep the forecast's own. Checked on the Iowa data: "Polk
+  county vodka, in dollars", 88 series, is stored as an example.
+- 18 November 2026. The screens now lead with forecasting. The first screen
+  says what the application does in three steps and has a "New forecast"
+  button on each dataset. Adding a dataset goes straight on to the forecast
+  screen, where a name is offered and every choice has a default. The
+  dataset screen opens with a chart of the history; the table's columns and
+  first rows are folded under "About this table". Why: Oliver could not
+  tell from the first screens what the application is for.
+- 18 November 2026. Fixed a fault: the running application read a history
+  table's dates once and kept them, so a new month in the table could not
+  be reissued until a restart. It now asks again after 60 seconds.

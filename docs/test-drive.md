@@ -25,14 +25,15 @@ once, which takes under a minute.
 
 ## 1. The data (2 minutes)
 
-1. The first screen lists two datasets: "Iowa liquor sales, monthly" and
-   "Iowa liquor sales, weekly".
-2. Open the monthly one. Four tiles at the top: 58 months of history from
-   January 2022 to October 2026, 399,736 rows, the number of forecasts, and
-   the minimum history of 24 months.
-3. Under "History" you see the table it reads, `u4cast.iowa_liquor_monthly`,
-   each column and what it is used for, and the first rows. **Copy SQL**
-   gives a query for the same table.
+1. The first screen says what the application does in three steps, and
+   under "Your data" lists two datasets: "Iowa liquor sales, monthly" and
+   "Iowa liquor sales, weekly". Each has a **New forecast** button.
+2. Click the name of the monthly one. A chart shows its whole history added
+   together, 58 months from January 2022 to October 2026. The buttons
+   `bottles`, `dollars` and `liters` switch the number it shows.
+3. Below are its forecasts. **About this table**, at the bottom, opens the
+   technical part: the table it reads, `u4cast.iowa_liquor_monthly`, with
+   399,736 rows, each column and what it is used for, and the first rows.
 
 ## 2. A stored forecast (5 minutes)
 
@@ -113,20 +114,25 @@ Open the tab **Stored rows**.
 
 Open the monthly dataset and click **New forecast**.
 
-1. **One series per**: leave all four columns on (county, category, vendor,
+Every choice on this screen has a default, so **Create forecast** works at
+once. The steps below change some of them.
+
+1. **What to forecast**: `bottles`, `dollars` or `liters`. Choose `dollars`
+   to forecast sales value.
+2. **One series per**: leave all four columns on (county, category, vendor,
    item). Turning one off adds its values together.
-2. **Only these**: under `county` choose `LINN`. The panel on the right now
+3. **Only these**: under `county` choose `LINN`. The panel on the right now
    says the forecast covers 569 series.
-3. **History to use**: leave "From" alone. Under "To" choose July 2026, so
+4. **History to use**: leave "From" alone. Under "To" choose July 2026, so
    that later months are left to reissue. The panel says 55 months of
    history.
-4. **How far ahead**: 3 months.
-5. **Check accuracy on the past**: leave it on, from 4 past dates, 3 months
+5. **How far ahead**: 3 months.
+6. **Check accuracy on the past**: leave it on, from 4 past dates, 3 months
    apart. The screen lists the dates: July 2025, October 2025, January 2026
    and April 2026.
-6. Give it a name and click **Create forecast**. It takes about half a
-   minute and then opens.
-7. Reissue it with history to August 2026, then September 2026. Open
+7. A name is offered; change it if you like. Click **Create forecast**. It
+   takes about half a minute and then opens.
+8. Reissue it with history to August 2026, then September 2026. Open
    **Issues compared**: three issues predicted October 2026, and the actual
    is next to them.
 
@@ -138,13 +144,13 @@ series per" and no filter: 42 series, one per category, statewide.
 The file `docs/sample-sales.csv` in this repo is a made-up example: 6
 series, 36 months, 216 rows. Download it to your computer first.
 
-1. On the first screen click **Add a dataset**, then **Upload a CSV**.
+1. On the first screen click **Bring your data**, then **Upload a CSV**.
 2. The screen should say the table has 216 rows, and suggest `month` as the
    date, `units` as the value to forecast, and `region` and `product` as
    what tells series apart. Frequency: "Detected monthly".
 3. "When a date has no row for a series": leave it. The file has no gaps.
-4. Name it and click **Save the dataset**.
-5. Click **New forecast**: 6 series of 36 months. Forecast 3 months ahead
+4. Name it and click **Save and forecast**.
+5. The new forecast screen opens: 6 series of 36 months. Forecast 3 months ahead
    with an accuracy check from 4 past dates, 3 months apart.
 
 The upload becomes a new Iceberg table, `u4cast.upload_sample_sales`.
@@ -169,7 +175,7 @@ In a session terminal, in the project folder:
 .venv/bin/pytest
 ```
 
-Expected: 156 passed, 12 skipped. The 12 need Spark or the model weights and
+Expected: 158 passed, 12 skipped. The 12 need Spark or the model weights and
 are skipped unless asked for; the README says how.
 
 ## What to expect that is not a fault

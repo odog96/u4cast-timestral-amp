@@ -159,7 +159,7 @@ function PickColumns({ table }: { table: string }) {
     mutationFn: api.saveDataset,
     onSuccess: (saved) => {
       client.invalidateQueries({ queryKey: ["datasets"] });
-      navigate(`/datasets/${encodeURIComponent(saved.name)}`);
+      navigate(`/datasets/${encodeURIComponent(saved.name)}/forecast`);
     },
   });
 
@@ -213,7 +213,7 @@ function PickColumns({ table }: { table: string }) {
             )}
           </div>
           <div className="field" style={{ flex: "1 1 220px" }}>
-            <label htmlFor="target-column">Value to forecast</label>
+            <label htmlFor="target-column">Number to forecast</label>
             <select
               id="target-column"
               className="select"
@@ -227,6 +227,7 @@ function PickColumns({ table }: { table: string }) {
                 </option>
               ))}
             </select>
+            <div className="hint">The usual one. Each forecast can choose another number column.</div>
           </div>
           <div className="field" style={{ flex: "1 1 220px" }}>
             <label htmlFor="frequency">Frequency</label>
@@ -332,7 +333,7 @@ function PickColumns({ table }: { table: string }) {
             }
           >
             {save.isPending && <span className="spinner" />}
-            Save the dataset
+            Save and forecast
           </button>
         </div>
         {save.error && (

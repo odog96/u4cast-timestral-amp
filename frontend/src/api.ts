@@ -93,6 +93,7 @@ export interface ForecastGroup {
 
 export interface DatasetOverview extends Dataset {
   source: Source;
+  number_columns: string[];
   dates: string[];
   minimum_history: number;
   minimum_history_floor: number;
@@ -106,6 +107,7 @@ export interface SliceRequest {
   history_start: string | null;
   history_end: string | null;
   minimum_history: number | null;
+  target_column: string | null;
   horizon: number;
   cutoffs: number;
   cutoff_step: number;
@@ -263,6 +265,10 @@ export const api = {
   datasets: () => get<Dataset[]>("/api/datasets"),
   dataset: (name: string) => get<DatasetOverview>(`/api/datasets/${e(name)}`),
   saveDataset: (body: Omit<Dataset, "forecasts" | "issues">) => post<Dataset>("/api/datasets", body),
+  history: (name: string, target: string) =>
+    get<{ target: string; dates: string[]; values: (number | null)[] }>(
+      `/api/datasets/${e(name)}/history?target=${e(target)}`,
+    ),
   dimensionValues: (name: string, column: string) =>
     get<(string | number)[]>(`/api/datasets/${e(name)}/dimensions/${e(column)}`),
   slice: (name: string, body: SliceRequest) =>

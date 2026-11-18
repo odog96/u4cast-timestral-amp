@@ -1,9 +1,11 @@
 // One dataset: its forecasts, and the history it reads.
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api";
-import { CopyButton, ErrorNote, Icon, Loading, RowsTable, Tile, useCrumbs } from "../components/ui";
+import { api, type DatasetOverview } from "../api";
+import { ChartFigure } from "../components/LineChart";
+import { CopyButton, ErrorNote, Icon, Loading, RowsTable, useCrumbs } from "../components/ui";
 import { day, FILLS, FREQUENCY_NAMES, period, periods } from "../format";
 
 export function DatasetPage() {
@@ -30,7 +32,7 @@ export function DatasetPage() {
   const here = `/datasets/${encodeURIComponent(name)}`;
   const roles: Record<string, string> = {
     [dataset.date_column]: "Date",
-    [dataset.target_column]: "Value to forecast",
+    [dataset.target_column]: "Number to forecast",
   };
   for (const column of dataset.dimension_columns) roles[column] = "Tells series apart";
   const sql = `select *\nfrom ${dataset.source_table}\norder by ${dataset.date_column} desc\nlimit 100;`;
@@ -41,9 +43,10 @@ export function DatasetPage() {
         <div>
           <h1>{dataset.name}</h1>
           <p className="sub">
-            {FREQUENCY_NAMES[dataset.frequency]} history of{" "}
-            <strong style={{ color: "var(--ink)" }}>{dataset.target_column}</strong> in{" "}
-            <span className="mono">{dataset.source_table}</span>
+            {FREQUENCY_NAMES[dataset.frequency]} history, {periods(dates.length, dataset.frequency)}
+            {dates.length > 0 &&
+              `, ${period(dates[0], dataset.frequency)} to ${period(dates[dates.length - 1], dataset.frequency)}`}
+            . One series per {dataset.dimension_columns.join(", ") || "date"}.
           </p>
         </div>
         <Link to={`${here}/forecast`} className="btn primary large">
@@ -53,36 +56,13 @@ export function DatasetPage() {
       </div>
 
       <div className="stack">
-        <section className="card">
-          <div className="tiles">
-            <Tile
-              label="History"
-              value={periods(dates.length, dataset.frequency)}
-              note={
-                dates.length
-                  ? `${period(dates[0], dataset.frequency)} to ${period(dates[dates.length - 1], dataset.frequency)}`
-                  : "No dates"
-              }
-            />
-            <Tile label="Rows" value={dataset.source.rows.toLocaleString()} note="In the Iceberg table" />
-            <Tile
-              label="Forecasts"
-              value={dataset.forecast_groups.length}
-              note={`${dataset.issues} issue${dataset.issues === 1 ? "" : "s"} stored`}
-            />
-            <Tile
-              label="Minimum history"
-              value={periods(dataset.minimum_history, dataset.frequency)}
-              note="A series with less is left out"
-            />
-          </div>
-        </section>
+        <History dataset={dataset} />
 
         <section className="card">
           <div className="card-head">
             <div>
               <h2>Forecasts</h2>
-              <div className="sub">Each forecast keeps every issue made of it.</div>
+              <div className="sub">Each forecast keeps every issue made of it. Open one to explore it.</div>
             </div>
           </div>
           {dataset.forecast_groups.length === 0 ? (
@@ -100,6 +80,7 @@ export function DatasetPage() {
                 <thead>
                   <tr>
                     <th>Forecast</th>
+                    <th>Of</th>
                     <th>History to</th>
                     <th className="r">Series</th>
                     <th className="r">Ahead</th>
@@ -121,6 +102,7 @@ export function DatasetPage() {
                         </Link>
                         <span className="cell-sub">By {group.latest.dimension_columns.join(", ") || "total"}</span>
                       </td>
+                      <td>{group.latest.target_column}</td>
                       <td className="nowrap">{period(group.latest.history_end_date, dataset.frequency)}</td>
                       <td className="r">{group.latest.series?.toLocaleString() ?? "–"}</td>
                       <td className="r nowrap">{periods(group.latest.horizon, dataset.frequency)}</td>
@@ -141,14 +123,21 @@ export function DatasetPage() {
           )}
         </section>
 
-        <section className="card">
-          <div className="card-head">
-            <div>
-              <h2>History</h2>
-              <div className="sub">
-                Read from <span className="mono">{dataset.source_table}</span>. The application never
-                writes to this table.
-              </div>
+        <details className="card about">
+          <summary>
+            <span>
+              About this table
+              <span className="sub" style={{ marginLeft: 10 }}>
+                Columns, first rows and where forecasts are stored
+              </span>
+            </span>
+            <Icon name="chevron" size={16} />
+          </summary>
+          <div className="card-pad spread" style={{ borderBottom: "1px solid var(--line)" }}>
+            <div className="sub">
+              Read from <span className="mono">{dataset.source_table}</span>,{" "}
+              {dataset.source.rows.toLocaleString()} rows. The application never writes to this table.
+              A series needs {periods(dataset.minimum_history, dataset.frequency)} of history.
             </div>
             <CopyButton text={sql} label="Copy SQL" />
           </div>
@@ -177,8 +166,54 @@ export function DatasetPage() {
             columns={dataset.source.columns.map((column) => column.name)}
             rows={dataset.source.preview.slice(0, 8)}
           />
-        </section>
+        </details>
       </div>
     </main>
   );
 }
+
+/** The whole dataset added together over time, for whichever number is chosen. */
+function History({ dataset }: { dataset: DatasetOverview }) {
+  const [target, setTarget] = useState(dataset.target_column);
+  const history = useQuery({
+    queryKey: ["history", dataset.name, target],
+    queryFn: () => api.history(dataset.name, target),
+    placeholderData: (previous) => previous,
+  });
+  const chips = dataset.number_columns.length > 1 && (
+    <div className="chips">
+      {dataset.number_columns.map((column) => (
+        <button
+          key={column}
+          className={`chip ${target === column ? "on" : ""}`}
+          onClick={() => setTarget(column)}
+          aria-pressed={target === column}
+        >
+          {column}
+        </button>
+      ))}
+    </div>
+  );
+  if (history.error) return <ErrorNote error={history.error} />;
+  if (!history.data) {
+    return (
+      <section className="card card-pad">
+        <Loading what="Reading the history" />
+      </section>
+    );
+  }
+  return (
+    <ChartFigure
+      title="History"
+      subtitle={`${history.data.target} by ${UNIT[dataset.frequency]}, everything in this data added together`}
+      actions={chips}
+      dates={history.data.dates}
+      series={[
+        { id: "actual", label: "Actual", color: "var(--series-actual)", values: history.data.values },
+      ]}
+      frequency={dataset.frequency}
+    />
+  );
+}
+
+const UNIT = { daily: "day", weekly: "week", monthly: "month", quarterly: "quarter" } as const;

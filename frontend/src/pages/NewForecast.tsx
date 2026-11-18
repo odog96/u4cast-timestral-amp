@@ -7,7 +7,7 @@ import { api, type DatasetOverview, type Frequency, type Job, type SliceRequest 
 import { JobProgress } from "../components/JobProgress";
 import { MultiSelect } from "../components/pickers";
 import { ErrorNote, Icon, Loading, useCrumbs, useDebounced } from "../components/ui";
-import { duration, period, periods, unit } from "../format";
+import { capital, duration, period, periods, unit } from "../format";
 
 const HORIZONS: Record<Frequency, number[]> = {
   daily: [7, 14, 28, 90],
@@ -50,6 +50,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
   const navigate = useNavigate();
   const frequency = dataset.frequency;
   const dates = dataset.dates;
+  const [target, setTarget] = useState<string>(dataset.target_column);
   const [dimensions, setDimensions] = useState<string[]>(dataset.dimension_columns);
   const [filters, setFilters] = useState<Record<string, (string | number)[]>>({});
   const [start, setStart] = useState<string | null>(null);
@@ -70,11 +71,12 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
       history_start: start,
       history_end: end,
       minimum_history: shortHistory ? dataset.minimum_history_floor : null,
+      target_column: target,
       horizon: Math.max(1, horizon || 1),
       cutoffs: check ? Math.max(0, cutoffs || 0) : 0,
       cutoff_step: Math.max(1, step || 1),
     }),
-    [dataset, dimensions, filters, start, end, shortHistory, horizon, check, cutoffs, step],
+    [dataset, target, dimensions, filters, start, end, shortHistory, horizon, check, cutoffs, step],
   );
   const settled = useDebounced(request, 350);
   const summary = useQuery({
@@ -84,7 +86,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
     retry: false,
   });
   const create = useMutation({
-    mutationFn: () => api.createForecast(dataset.name, { ...request, forecast_name: forecastName.trim() }),
+    mutationFn: () => api.createForecast(dataset.name, { ...request, forecast_name: chosenName }),
     onSuccess: setJob,
   });
   const onDone = useCallback(
@@ -100,6 +102,13 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
     [navigate],
   );
 
+  // A name is offered, so a forecast can be made without typing one.
+  const taken = new Set(dataset.forecast_groups.map((group) => group.forecast_name));
+  const base = `${capital(target)}, ${periods(Math.max(1, horizon || 1), frequency)} ahead`;
+  let suggested = base;
+  for (let n = 2; taken.has(suggested); n += 1) suggested = `${base} (${n})`;
+  const chosenName = forecastName.trim() || suggested;
+
   const data = summary.data;
   const stale = summary.isFetching || settled !== request;
   const toggleDimension = (column: string) =>
@@ -113,7 +122,8 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
         <div>
           <h1>New forecast</h1>
           <p className="sub">
-            Choose which series of {dataset.name} to forecast, from which history, and how far ahead.
+            Choose what to forecast in {dataset.name}, for which series, and how far ahead. Every
+            choice has a default: the button on the right works as it is.
           </p>
         </div>
       </div>
@@ -122,7 +132,26 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
         <section className="card">
           <div className="form-section">
             <h2>
-              <span className="step-no">1</span>One series per
+              <span className="step-no">1</span>What to forecast
+            </h2>
+            <p className="sub">The number in {dataset.name} to forecast.</p>
+            <div className="chips">
+              {dataset.number_columns.map((column) => (
+                <button
+                  key={column}
+                  className={`chip ${target === column ? "on" : ""}`}
+                  onClick={() => setTarget(column)}
+                  aria-pressed={target === column}
+                >
+                  {column}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-section">
+            <h2>
+              <span className="step-no">2</span>One series per
             </h2>
             <p className="sub">
               Each combination of these columns is one series. Leave a column out to add its values
@@ -149,7 +178,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
 
           <div className="form-section">
             <h2>
-              <span className="step-no">2</span>Only these
+              <span className="step-no">3</span>Only these
             </h2>
             <p className="sub">Narrow the data by any column. The filter runs in the data lake.</p>
             <div className="stack" style={{ gap: 12 }}>
@@ -173,7 +202,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
 
           <div className="form-section">
             <h2>
-              <span className="step-no">3</span>History to use
+              <span className="step-no">4</span>History to use
             </h2>
             <p className="sub">
               The forecast starts after the last date. Choose an earlier one to forecast as of the
@@ -236,7 +265,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
 
           <div className="form-section">
             <h2>
-              <span className="step-no">4</span>How far ahead
+              <span className="step-no">5</span>How far ahead
             </h2>
             <p className="sub">The number of {unit(frequency)} to forecast after the end of history.</p>
             <div className="row wrap">
@@ -266,7 +295,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
 
           <div className="form-section">
             <h2>
-              <span className="step-no">5</span>Check accuracy on the past
+              <span className="step-no">6</span>Check accuracy on the past
             </h2>
             <p className="sub">
               The same forecast is made from earlier dates and compared with what then happened.
@@ -385,14 +414,14 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
                   <input
                     id="forecast-name"
                     className="input"
-                    placeholder="For example: Polk county SKUs"
+                    placeholder={suggested}
                     value={forecastName}
                     onChange={(event) => setForecastName(event.target.value)}
                   />
                 </div>
                 <button
                   className="btn primary large block"
-                  disabled={!forecastName.trim() || !data || data.series === 0 || stale || create.isPending}
+                  disabled={!data || data.series === 0 || stale || create.isPending}
                   onClick={() => create.mutate()}
                 >
                   Create forecast

@@ -1081,3 +1081,46 @@ table.data.compact th {
   background: var(--surface-sunk);
   color: var(--ink);
 }
+
+/* The three steps on the first screen. */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+.steps li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.steps li div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.steps li span:not(.step-no) {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+details.about > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 16px 22px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+details.about > summary::-webkit-details-marker {
+  display: none;
+}
+details.about > summary .sub {
+  font-weight: 400;
+}
+details.about[open] > summary {
+  border-bottom: 1px solid var(--line);
+}

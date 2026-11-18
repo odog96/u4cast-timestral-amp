@@ -181,6 +181,7 @@ class Workspace:
         self._sources: dict[str, dict[str, Any]] = {}
         self._dates: dict[str, pd.DatetimeIndex] = {}
         self._dates_read: dict[str, float] = {}
+        self._history: dict[tuple[str, str], pd.Series] = {}
         self._dimension_values: dict[tuple[str, str], list[Any]] = {}
 
     # Starting up
@@ -259,14 +260,15 @@ class Workspace:
         }
 
     def number_columns(self, record: DatasetRecord) -> list[str]:
-        """Return the columns of a dataset that can be forecast: its numbers, the usual one first."""
+        """Return the number columns of a dataset that can be forecast, the usual one first."""
         taken = {record.date_column, *record.dimension_columns}
         numeric = [
             column["name"]
             for column in self.source(record.source_table)["columns"]
             if column["type"].startswith(NUMBER_TYPES) and column["name"] not in taken
         ]
-        return sorted(set(numeric) | {record.target_column}, key=lambda c: c != record.target_column)
+        others = [column for column in numeric if column != record.target_column]
+        return [record.target_column, *others]
 
     def target(self, record: DatasetRecord, chosen: str | None) -> str:
         """Return the column to forecast: the one asked for, or the dataset's usual one."""
@@ -310,6 +312,7 @@ class Workspace:
             if before is not None and not before.equals(dates):
                 # The table got new rows: what was read from it is out of date.
                 self._panels.clear()
+                self._history.clear()
                 self._sources.pop(record.source_table, None)
             self._dates[record.dataset] = dates
             self._dates_read[record.dataset] = time.monotonic()
@@ -327,6 +330,29 @@ class Workspace:
             "minimum_history_floor": min(minimum_history(record.frequency), 32),
             "forecast_groups": self.forecast_groups(name),
             "values_table": f"{self.store.database}.{forecast_values_table(name)}",
+        }
+
+    def history(self, name: str, target: str | None = None) -> dict[str, Any]:
+        """Return the whole of a dataset added together, date by date, for one number column."""
+        record = self.dataset(name)
+        column = self.target(record, target)
+        dates = self.dates(record)  # also drops what is out of date
+        key = (name, column)
+        if key not in self._history:
+            with self._lock:
+                frame = self.store.load_slice(
+                    record.source_table,
+                    date_column=record.date_column,
+                    target_column=column,
+                    dimension_columns=(),
+                )
+            totals = frame.set_index(record.date_column)[column].groupby(level=0).sum()
+            self._history[key] = totals.reindex(dates)
+        totals = self._history[key]
+        return {
+            "target": column,
+            "dates": [iso(day) for day in totals.index],
+            "values": [None if pd.isna(value) else float(value) for value in totals],
         }
 
     def dimension_values(self, name: str, column: str) -> list[Any]:
