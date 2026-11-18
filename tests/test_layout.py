@@ -66,6 +66,7 @@ def test_forecasts_table_columns():
         "kind",
         "created_at",
         "fill",
+        "minimum_history",
     ]
 
 
@@ -134,8 +135,11 @@ def test_records_survive_being_stored_as_rows():
         kind=Kind.BACKTEST,
         created_at=dt.datetime(2026, 11, 17, 22, 0, 0),
         fill=Fill.INTERPOLATE,
+        minimum_history=32,
     )
     assert ForecastRecord.from_row(forecast.to_row()) == forecast
+    older = {**forecast.to_row(), "minimum_history": None}
+    assert ForecastRecord.from_row(older).minimum_history == 0
 
 
 def test_a_row_stored_before_the_fill_column_existed_reads_as_missing():

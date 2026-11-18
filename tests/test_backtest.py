@@ -7,7 +7,13 @@ import pandas as pd
 import pytest
 
 from conftest import long_frame, prepare_units
-from u4cast.backtest import backtest_cutoffs, run_backtest, seasonal_reference
+from u4cast.backtest import (
+    backtest_cutoffs,
+    run_backtest,
+    score_forecasts,
+    seasonal_reference,
+)
+from u4cast.forecast import issue_forecast
 from u4cast.frequency import Frequency
 from u4cast.layout import Kind
 from u4cast.model import StandInForecaster
@@ -194,3 +200,40 @@ def test_a_date_with_no_row_is_scored_as_zero_when_the_dataset_says_so():
         (result.scored["ts_id"] == "sku=A") & (result.scored["date"] == dates[27])
     ]
     assert march["actual"].tolist() == [0.0]
+
+
+def test_stored_forecasts_can_be_scored_again_later(monthly_panel):
+    result = backtest(monthly_panel)
+    stored = [
+        # As read back from storage: rows in another order, and no link to the panel.
+        (issued.record, issued.values.sample(frac=1, random_state=4).reset_index(drop=True))
+        for issued in result.forecasts
+    ]
+    scores = score_forecasts(monthly_panel, stored)
+    assert scores.total == pytest.approx(result.total)
+    assert scores.by_series["ts_id"].tolist() == result.by_series["ts_id"].tolist()
+    assert scores.by_series["mae"].tolist() == pytest.approx(result.by_series["mae"].tolist())
+
+
+def test_error_is_reported_by_how_far_ahead_the_forecast_was(monthly_panel):
+    result = backtest(monthly_panel)
+    by_step = result.by_step.set_index("step")
+    assert by_step.index.tolist() == [1, 2, 3, 4, 5, 6]
+    # A flat forecast of a series that rises by 1 a month is off by the step.
+    assert by_step["mae"].tolist() == pytest.approx([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    assert by_step["n"].tolist() == [6] * 6
+    assert by_step["reference_mae"].tolist() == pytest.approx([12.0] * 6)
+
+
+def test_a_forecast_whose_dates_have_no_actual_yet_is_not_scored(monthly_panel):
+    latest = issue_forecast(
+        monthly_panel,
+        StandInForecaster(),
+        horizon=6,
+        forecast_name="n",
+        dataset="d",
+        target_column="units",
+    )
+    scores = score_forecasts(monthly_panel, [(latest.record, latest.values)])
+    assert scores.total["n"] == 0
+    assert scores.scored["actual"].isna().all()

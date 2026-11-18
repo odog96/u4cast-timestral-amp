@@ -37,6 +37,14 @@ def test_series_are_sent_in_batches_never_one_call_per_series():
     assert result.forecast.shape == (700, 5)
 
 
+def test_progress_is_reported_after_each_batch():
+    model = StandInForecaster(batch_size=300)
+    seen = []
+    model.on_batch = lambda done, total: seen.append((done, total))
+    model.forecast(histories(700), horizon=5)
+    assert seen == [(300, 700), (600, 700), (700, 700)]
+
+
 def test_batch_size_does_not_change_the_result_or_its_order():
     data = histories(11)
     whole = StandInForecaster(batch_size=500).forecast(data, horizon=3)

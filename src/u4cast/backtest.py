@@ -18,7 +18,7 @@ import pandas as pd
 
 from u4cast.forecast import IssuedForecast, issue_forecast
 from u4cast.frequency import SEASON_LENGTH
-from u4cast.layout import Kind
+from u4cast.layout import ForecastRecord, Kind
 from u4cast.metrics import METRICS, error_metrics, error_metrics_by
 from u4cast.model import Forecaster
 from u4cast.prepare import TS_ID, Panel
@@ -42,6 +42,19 @@ class BacktestResult:
     and so on."""
     total: dict[str, float]
     """The same measures over all series together."""
+    by_step: pd.DataFrame
+    """The same measures by how many periods ahead the forecast was: `step`,
+    `n`, the four measures and the reference's."""
+
+
+@dataclass(frozen=True)
+class Scores:
+    """Forecasts scored against actuals: the parts of a `BacktestResult` that are not forecasts."""
+
+    scored: pd.DataFrame
+    by_series: pd.DataFrame
+    total: dict[str, float]
+    by_step: pd.DataFrame
 
 
 def backtest_cutoffs(
@@ -119,11 +132,8 @@ def run_backtest(
     cutoff alone, so nothing from after a cutoff reaches the model.
     """
     cutoffs = backtest_cutoffs(panel, first_cutoff=first_cutoff, step=step, horizon=horizon)
-    season = SEASON_LENGTH[panel.frequency]
-    forecasts: list[IssuedForecast] = []
-    scored_parts: list[pd.DataFrame] = []
-    for history_steps in panel.calendar.steps_of(cutoffs) + 1:
-        issued = issue_forecast(
+    forecasts = [
+        issue_forecast(
             panel,
             forecaster,
             horizon=horizon,
@@ -134,15 +144,54 @@ def run_backtest(
             kind=Kind.BACKTEST,
             history_steps=int(history_steps),
         )
-        forecasts.append(issued)
-        part = issued.values.copy()
-        rows = issued.rows
-        part["actual"] = panel.actuals[rows, history_steps : history_steps + horizon].ravel()
-        part[REFERENCE] = seasonal_reference(
-            panel.history(int(history_steps))[rows], horizon, season
-        ).ravel()
-        scored_parts.append(part)
-    scored = pd.concat(scored_parts, ignore_index=True)
+        for history_steps in panel.calendar.steps_of(cutoffs) + 1
+    ]
+    scores = score_forecasts(panel, [(issued.record, issued.values) for issued in forecasts])
+    logger.info(
+        "Backtest %s: %d cutoffs from %s to %s, %d series, WAPE %.3f, reference WAPE %.3f",
+        forecast_name,
+        len(cutoffs),
+        cutoffs[0].date(),
+        cutoffs[-1].date(),
+        panel.n_series,
+        scores.total["wape"],
+        scores.total[f"{REFERENCE}_wape"],
+    )
+    return BacktestResult(forecasts, scores.scored, scores.by_series, scores.total, scores.by_step)
+
+
+def score_forecasts(
+    panel: Panel, forecasts: Sequence[tuple[ForecastRecord, pd.DataFrame]]
+) -> Scores:
+    """Score forecasts against what actually happened, and against the reference.
+
+    Each forecast is its row of the forecasts table and its rows of values,
+    as issued or as read back from storage. `panel` is the same slice with
+    history running past the forecasts' dates. A forecast date the panel has
+    no actual for is not scored.
+    """
+    season = SEASON_LENGTH[panel.frequency]
+    position = pd.Index(panel.ts_ids)
+    parts: list[pd.DataFrame] = []
+    for record, values in forecasts:
+        history_steps = int(panel.calendar.steps_of([record.history_end_date])[0]) + 1
+        if history_steps < 1:
+            raise ValueError(
+                f"The forecast {record.forecast_id} ends its history on "
+                f"{record.history_end_date}, which is not a date of this history."
+            )
+        row = position.get_indexer(values[TS_ID])
+        step = panel.calendar.steps_of(values["date"])
+        ahead = values["step"].to_numpy(dtype=np.int64) - 1
+        known = (row >= 0) & (step >= 0) & (step < panel.n_steps)
+        actual = np.full(len(values), np.nan)
+        actual[known] = panel.actuals[row[known], step[known]]
+        reference = np.full(len(values), np.nan)
+        in_panel = row >= 0
+        repeated = seasonal_reference(panel.history(history_steps), record.horizon, season)
+        reference[in_panel] = repeated[row[in_panel], ahead[in_panel]]
+        parts.append(values.assign(actual=actual, **{REFERENCE: reference}))
+    scored = pd.concat(parts, ignore_index=True)
 
     model_error = error_metrics_by(scored[TS_ID], scored["actual"], scored["forecast"])
     reference_error = error_metrics_by(scored[TS_ID], scored["actual"], scored[REFERENCE])
@@ -154,18 +203,12 @@ def run_backtest(
         .sort_values(["wape", TS_ID], ascending=[False, True], na_position="last")
         .reset_index(drop=True)
     )
+    by_step = error_metrics_by(scored["step"], scored["actual"], scored["forecast"]).join(
+        error_metrics_by(scored["step"], scored["actual"], scored[REFERENCE])[
+            list(METRICS)
+        ].add_prefix(f"{REFERENCE}_")
+    )
     total = error_metrics(scored["actual"], scored["forecast"])
     reference_total = error_metrics(scored["actual"], scored[REFERENCE])
     total.update({f"{REFERENCE}_{name}": reference_total[name] for name in METRICS})
-
-    logger.info(
-        "Backtest %s: %d cutoffs from %s to %s, %d series, WAPE %.3f, reference WAPE %.3f",
-        forecast_name,
-        len(cutoffs),
-        cutoffs[0].date(),
-        cutoffs[-1].date(),
-        panel.n_series,
-        total["wape"],
-        total[f"{REFERENCE}_wape"],
-    )
-    return BacktestResult(forecasts, scored, by_series, total)
+    return Scores(scored, by_series, total, by_step.reset_index(names="step"))

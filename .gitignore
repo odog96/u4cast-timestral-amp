@@ -39,3 +39,6 @@ node_modules/
 
 # Downloaded demo data
 data/
+
+# Front end build output
+frontend/dist/

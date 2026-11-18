@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import math
 import os
 import re
 from collections.abc import Mapping, Sequence
@@ -43,16 +44,41 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_DATABASE = "u4cast"
-# Spark settings this project needs, each with the environment variable that
-# changes it. Cloudera AI's own defaults give Spark most of the container's
-# memory, which leaves too little for the web server and the model, and let
-# one job ask for up to 249 workers, which made the cluster add machines for
-# a 3 GB job and then lose workers as it shrank again.
-SPARK_SETTINGS: dict[str, tuple[str, str]] = {
-    "spark.driver.memory": ("U4CAST_SPARK_DRIVER_MEMORY", "2g"),
-    "spark.executor.memory": ("U4CAST_SPARK_EXECUTOR_MEMORY", "2g"),
-    "spark.dynamicAllocation.maxExecutors": ("U4CAST_SPARK_MAX_EXECUTORS", "8"),
-}
+SPARK_LOCAL = "local"
+SPARK_CLUSTER = "cluster"
+
+
+def spark_settings(environ: Mapping[str, str]) -> dict[str, str]:
+    """Return the Spark settings this project needs, read from the environment.
+
+    `U4CAST_SPARK_MODE` says where Spark runs:
+
+    - `local`, the default: inside this container, with no separate workers.
+      It starts in 7 seconds, and nothing can be lost on the way. It is the
+      right size for this project: a slice is thousands of series, not
+      billions of rows.
+    - `cluster`: Cloudera AI starts worker containers. Capped at
+      `U4CAST_SPARK_MAX_EXECUTORS` workers, 8 by default, because the
+      platform's own default lets one job ask for 249.
+
+    `U4CAST_SPARK_DRIVER_MEMORY`, 2g by default, caps Spark's own memory in
+    this container. The platform's default hands Spark most of the container,
+    which leaves too little for the web server and the model.
+    """
+    mode = environ.get("U4CAST_SPARK_MODE", SPARK_LOCAL)
+    if mode not in (SPARK_LOCAL, SPARK_CLUSTER):
+        raise ValueError(f"U4CAST_SPARK_MODE must be {SPARK_LOCAL} or {SPARK_CLUSTER}; got {mode}.")
+    settings = {"spark.driver.memory": environ.get("U4CAST_SPARK_DRIVER_MEMORY", "2g")}
+    if mode == SPARK_LOCAL:
+        cores = max(1, math.ceil(int(environ.get("CDSW_CPU_MILLICORES", "2000")) / 1000))
+        settings["spark.master"] = f"local[{cores}]"
+        settings["spark.sql.shuffle.partitions"] = str(4 * cores)
+    else:
+        settings["spark.executor.memory"] = environ.get("U4CAST_SPARK_EXECUTOR_MEMORY", "2g")
+        settings["spark.dynamicAllocation.maxExecutors"] = environ.get(
+            "U4CAST_SPARK_MAX_EXECUTORS", "8"
+        )
+    return settings
 
 
 def spark_session(connection_name: str | None = None) -> SparkSession:
@@ -60,8 +86,8 @@ def spark_session(connection_name: str | None = None) -> SparkSession:
 
     Runs in Cloudera AI only. The connection is `connection_name`, or the
     environment variable `U4CAST_SPARK_CONNECTION`, or the project's first
-    Spark data connection. Starting a session takes about 20 seconds, so the
-    application starts one and keeps it.
+    Spark data connection. `spark_settings` says how Spark runs. The
+    application starts one session and keeps it.
     """
     import cml.data_v1 as cmldata
     from pyspark.sql import SparkSession
@@ -80,8 +106,7 @@ def spark_session(connection_name: str | None = None) -> SparkSession:
     # builds the session itself, so they go in as command-line settings.
     if "PYSPARK_SUBMIT_ARGS" not in os.environ and SparkSession.getActiveSession() is None:
         settings = [
-            f"--conf {setting}={os.environ.get(variable, default)}"
-            for setting, (variable, default) in SPARK_SETTINGS.items()
+            f"--conf {setting}={value}" for setting, value in spark_settings(os.environ).items()
         ]
         os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join([*settings, "pyspark-shell"])
     logger.info("Starting Spark on the data connection %s", name)
@@ -296,6 +321,21 @@ class Store:
             records, key=lambda record: (record.history_end_date, record.created_at), reverse=True
         )
 
+    def forecast_sizes(self, dataset: str) -> dict[str, int]:
+        """Return how many series each stored forecast of a dataset has."""
+        from pyspark.sql import functions as fn
+
+        table = forecast_values_table(dataset)
+        if not self.spark.catalog.tableExists(f"{self.database}.{table}"):
+            return {}
+        rows = (
+            self.spark.table(_table(self.database, table))
+            .groupBy("forecast_id")
+            .agg(fn.countDistinct(TS_ID))
+            .collect()
+        )
+        return {row[0]: int(row[1]) for row in rows}
+
     def forecast_values(self, dataset: str, forecast_ids: Sequence[str]) -> pd.DataFrame:
         """Return the stored values of the given forecasts of a dataset."""
         from pyspark.sql import functions as fn
@@ -304,6 +344,52 @@ class Store:
         result = frame.where(fn.col("forecast_id").isin(list(forecast_ids))).toPandas()
         result["date"] = pd.to_datetime(result["date"])
         return result.sort_values(["forecast_id", TS_ID, "step"], ignore_index=True)
+
+    # Looking at tables, for the screens that add a dataset
+
+    def tables(self) -> list[str]:
+        """Return the full names of the history tables in this database.
+
+        The tables the application writes forecasts and datasets to are left out.
+        """
+        rows = self.spark.sql(f"show tables in {_quoted(self.database)}").collect()
+        names = sorted(row["tableName"] for row in rows)
+        return [
+            f"{self.database}.{name}"
+            for name in names
+            if name not in ("forecasts", "datasets") and not name.startswith("forecast_values_")
+        ]
+
+    def row_count(self, source_table: str) -> int:
+        """Return the number of rows of a table."""
+        return self.spark.table(_source(source_table)).count()
+
+    def preview(self, source_table: str, limit: int = 20) -> pd.DataFrame:
+        """Return the first rows of a table, as stored."""
+        return self.spark.table(_source(source_table)).limit(limit).toPandas()
+
+    def distinct_dates(self, source_table: str, date_column: str, limit: int = 50_000) -> list[Any]:
+        """Return the distinct values of a date column, for detecting the frequency."""
+        frame = self.spark.table(_source(source_table)).select(date_column).distinct()
+        return [row[0] for row in frame.limit(limit).collect()]
+
+    def count_slice_rows(
+        self,
+        source_table: str,
+        *,
+        date_column: str,
+        slice_filter: Mapping[str, Sequence[Any]] | None = None,
+        history_start: object | None = None,
+        history_end: object | None = None,
+    ) -> int:
+        """Return how many rows of history a slice reads, before any summing.
+
+        It is an upper limit on the rows `load_slice` returns, and cheap, so
+        a slice that is too large can be refused before it is loaded.
+        """
+        return self._slice(
+            source_table, date_column, slice_filter, history_start, history_end
+        ).count()
 
     # Uploads
 

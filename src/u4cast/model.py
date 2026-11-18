@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import abc
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -76,14 +77,18 @@ class BatchedForecaster(abc.ABC):
 
     model_name: str
     batch_size: int
+    on_batch: Callable[[int, int], None] | None = None
+    """Called after each batch with the series done and the series in all, so
+    a caller can show progress."""
 
     def forecast(self, histories: np.ndarray, horizon: int) -> ModelForecast:
         histories = _check_request(histories, horizon)
         size = self._batch_size_for(histories.shape[1], horizon)
-        parts = [
-            self._forecast_batch(histories[start : start + size], horizon)
-            for start in range(0, histories.shape[0], size)
-        ]
+        parts = []
+        for start in range(0, histories.shape[0], size):
+            parts.append(self._forecast_batch(histories[start : start + size], horizon))
+            if self.on_batch is not None:
+                self.on_batch(min(start + size, histories.shape[0]), histories.shape[0])
         logger.info(
             "Forecast %d series of %d steps, horizon %d, in %d model calls",
             histories.shape[0],

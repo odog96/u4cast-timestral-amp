@@ -44,6 +44,7 @@ FORECASTS_TABLE: tuple[tuple[str, str], ...] = (
     ("kind", "string"),
     ("created_at", "timestamp"),
     ("fill", "string"),  # what a date with no row became: see u4cast.prepare.Fill
+    ("minimum_history", "int"),  # the minimum history a series needed, in steps
 )
 
 DATASETS_TABLE: tuple[tuple[str, str], ...] = (
@@ -151,6 +152,9 @@ class ForecastRecord:
     """Dimension column to the values kept. Empty means the whole dataset."""
     fill: Fill = Fill.MISSING
     """What a date with no row in the history became."""
+    minimum_history: int = 0
+    """The minimum history a series needed, in steps. A reissue uses the same.
+    Zero in a row stored before this was recorded."""
 
     def to_row(self) -> dict[str, Any]:
         """Return the record as a row of the forecasts table."""
@@ -169,6 +173,7 @@ class ForecastRecord:
             "kind": self.kind.value,
             "created_at": self.created_at,
             "fill": self.fill.value,
+            "minimum_history": self.minimum_history,
         }
         return {name: row[name] for name, _ in FORECASTS_TABLE}
 
@@ -190,6 +195,9 @@ class ForecastRecord:
             kind=Kind(row["kind"]),
             created_at=pd.Timestamp(row["created_at"]).to_pydatetime(),
             fill=_fill_of(row),
+            minimum_history=int(row["minimum_history"])
+            if pd.notna(row.get("minimum_history"))
+            else 0,
         )
 
 

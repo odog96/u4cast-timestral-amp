@@ -93,6 +93,7 @@ def issue_forecast(
         kind=kind,
         created_at=created_at or dt.datetime.now(dt.UTC),
         fill=panel.fill,
+        minimum_history=panel.minimum_history,
     )
 
     future_dates = panel.calendar.future_dates(history_steps, horizon)

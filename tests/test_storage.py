@@ -143,6 +143,25 @@ def test_columns_values_and_dates_of_a_history_table(store, dataset):
     )
 
 
+def test_looking_at_a_history_table(store, dataset):
+    assert dataset.source_table in store.tables()
+    assert not any("forecast" in name or name.endswith(".datasets") for name in store.tables())
+    assert store.row_count(dataset.source_table) == 2 * 3 * 36
+    preview = store.preview(dataset.source_table, limit=5)
+    assert len(preview) == 5
+    assert sorted(preview.columns) == ["month", "sku", "store", "units"]
+    assert sorted(store.distinct_dates(dataset.source_table, "month")) == list(MONTHS.date)
+    assert (
+        store.count_slice_rows(
+            dataset.source_table,
+            date_column="month",
+            slice_filter={"sku": ["A"]},
+            history_start="2025-01-01",
+        )
+        == 2 * 12
+    )
+
+
 def test_a_slice_is_filtered_summed_and_limited_in_the_query(store, dataset):
     rows = store.load_slice(
         dataset.source_table,
