@@ -434,9 +434,12 @@ the application on 18 November 2026.
    Claude's recommendation: show accuracy in the demo as the honest check it
    is, and choose the slice knowing this.
 10. **Has the AMP been installed from scratch?** No. `.project-metadata.yaml`
-    and its scripts are written, and each script was run in this project,
-    but the AMP as a whole has not been installed into a new project. That
-    needs the repo on GitHub first.
+    parses and lists six steps. Run in this project on 18 November 2026:
+    steps 1 to 4, where step 4 ran the ingest as a Cloudera AI job with the
+    add-ons looked up, in 230 seconds. The scripts that steps 5 and 6 call
+    were run earlier, on 17 and 18 November. The AMP as a whole has not been
+    installed into a new project. That needs the repo on GitHub first, and
+    is the next thing to do.
 11. **Why do Claude Code's sessions keep ending?** Seven ended during this
     work, several while a second Spark was running next to other work. No
     log shows the cause. It may be memory.
@@ -1268,3 +1271,6 @@ Claude Code adds dated lines here.
 - 18 November 2026. Added open questions 9 (what the demo says about
   accuracy), 10 (the AMP has not been installed from scratch) and 11 (why
   sessions keep ending).
+- 18 November 2026. Added the AMP packaging (`.project-metadata.yaml` and
+  `amp/`) and the README. Order of work step 5 is written; open question 10
+  says what of it was run.
