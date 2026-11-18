@@ -42,3 +42,8 @@ data/
 
 # Front end build output
 frontend/dist/
+
+# Left behind by Spark when it cannot reach the data lake catalog
+metastore_db/
+derby.log
+spark-warehouse/

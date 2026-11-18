@@ -21,7 +21,7 @@ import logging
 import math
 import os
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -81,6 +81,21 @@ def spark_settings(environ: Mapping[str, str]) -> dict[str, str]:
     return settings
 
 
+def spark_environment(environ: MutableMapping[str, str]) -> None:
+    """Point Spark at the data lake's catalog, where Cloudera AI has not.
+
+    Spark reaches the catalog through the Hadoop settings and the Hive
+    client libraries. Cloudera AI puts both on Spark's path in a session, but
+    not in an application's container, where Spark then starts an empty
+    catalog of its own. Setting them here makes both places work.
+    """
+    settings = environ.setdefault("HADOOP_CONF_DIR", "/etc/hadoop/conf")
+    libraries = f"{environ.get('SPARK_HOME', '/opt/spark')}/optional-lib/*"
+    path = [part for part in environ.get("SPARK_DIST_CLASSPATH", "").split(":") if part]
+    path += [part for part in (libraries, settings) if part not in path]
+    environ["SPARK_DIST_CLASSPATH"] = ":".join(path)
+
+
 def spark_session(connection_name: str | None = None) -> SparkSession:
     """Return the Spark session of the project's Spark data connection.
 
@@ -104,6 +119,7 @@ def spark_session(connection_name: str | None = None) -> SparkSession:
         name = spark_connections[0]
     # These have to be in place before Spark starts, and Cloudera AI's library
     # builds the session itself, so they go in as command-line settings.
+    spark_environment(os.environ)
     if "PYSPARK_SUBMIT_ARGS" not in os.environ and SparkSession.getActiveSession() is None:
         settings = [
             f"--conf {setting}={value}" for setting, value in spark_settings(os.environ).items()

@@ -2,7 +2,7 @@
 
 import pytest
 
-from u4cast.storage import spark_settings
+from u4cast.storage import spark_environment, spark_settings
 
 
 def test_spark_runs_inside_the_container_by_default():
@@ -36,3 +36,21 @@ def test_spark_on_the_cluster_is_capped():
 def test_an_unknown_mode_is_refused():
     with pytest.raises(ValueError, match="U4CAST_SPARK_MODE must be local or cluster"):
         spark_settings({"U4CAST_SPARK_MODE": "yarn"})
+
+
+def test_spark_is_pointed_at_the_data_lake_catalog_where_cloudera_ai_has_not():
+    application = {"SPARK_HOME": "/opt/spark"}
+    spark_environment(application)
+    assert application["HADOOP_CONF_DIR"] == "/etc/hadoop/conf"
+    assert application["SPARK_DIST_CLASSPATH"] == "/opt/spark/optional-lib/*:/etc/hadoop/conf"
+
+
+def test_a_session_that_is_already_set_up_is_left_as_it_is():
+    session = {
+        "HADOOP_CONF_DIR": "/etc/hadoop/conf",
+        "SPARK_DIST_CLASSPATH": ":/opt/spark/optional-lib/*:/opt/hwc_for_spark3/*:/etc/hadoop/conf",
+    }
+    spark_environment(session)
+    assert session["SPARK_DIST_CLASSPATH"] == (
+        "/opt/spark/optional-lib/*:/opt/hwc_for_spark3/*:/etc/hadoop/conf"
+    )
