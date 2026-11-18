@@ -133,11 +133,15 @@ def test_records_survive_being_stored_as_rows():
         horizon=13,
         model_name="mistralai/Timestral-209M",
         kind=Kind.BACKTEST,
-        created_at=dt.datetime(2026, 11, 17, 22, 0, 0),
+        created_at=dt.datetime(2026, 11, 17, 22, 0, 0, tzinfo=dt.UTC),
         fill=Fill.INTERPOLATE,
         minimum_history=32,
     )
     assert ForecastRecord.from_row(forecast.to_row()) == forecast
+    # Storage hands the creation time back without its zone. It still compares with a new one.
+    stored = {**forecast.to_row(), "created_at": dt.datetime(2026, 11, 17, 22, 0, 0)}
+    assert ForecastRecord.from_row(stored) == forecast
+    assert ForecastRecord.from_row(stored).created_at < dt.datetime.now(dt.UTC)
     older = {**forecast.to_row(), "minimum_history": None}
     assert ForecastRecord.from_row(older).minimum_history == 0
 

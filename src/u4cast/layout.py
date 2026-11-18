@@ -109,6 +109,17 @@ def forecast_values_table(dataset: str) -> str:
     return f"forecast_values_{slug}"
 
 
+def _utc(value: Any) -> dt.datetime:
+    """Read a stored creation time as a time in UTC.
+
+    Storage hands times back without a time zone. They were written in UTC,
+    and a time made now carries its zone; the two must compare.
+    """
+    stamp = pd.Timestamp(value)
+    stamp = stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
+    return stamp.to_pydatetime()
+
+
 def _fill_of(row: Mapping[str, Any]) -> Fill:
     """Read `fill` from a stored row. A row stored before the column existed has none."""
     value = row.get("fill")
@@ -193,7 +204,7 @@ class ForecastRecord:
             horizon=int(row["horizon"]),
             model_name=row["model_name"],
             kind=Kind(row["kind"]),
-            created_at=pd.Timestamp(row["created_at"]).to_pydatetime(),
+            created_at=_utc(row["created_at"]),
             fill=_fill_of(row),
             minimum_history=int(row["minimum_history"])
             if pd.notna(row.get("minimum_history"))

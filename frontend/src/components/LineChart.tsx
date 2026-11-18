@@ -6,7 +6,7 @@ import { scaleLinear } from "d3-scale";
 import { area, line } from "d3-shape";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Frequency, Values } from "../api";
-import { monthName, monthOf, num, period, short, yearOf } from "../format";
+import { monthName, num, period, short, yearOf } from "../format";
 
 export interface ChartSeries {
   id: string;
@@ -35,6 +35,12 @@ interface ChartProps {
   markerLabel?: string;
   frequency: Frequency;
   height?: number;
+  /** Names for the positions along the bottom, when they are not dates. */
+  labels?: string[];
+  /** How a value is written in the tooltip and the table. */
+  formatValue?: (value: number) => string;
+  /** How a value is written on the axis. */
+  formatTick?: (value: number) => string;
 }
 
 const MARGIN = { top: 22, right: 18, bottom: 26, left: 50 };
@@ -54,8 +60,12 @@ function useWidth(): [React.RefObject<HTMLDivElement>, number] {
 }
 
 /** Where to put labels along the time axis: at year changes, or every few periods. */
-function timeTicks(dates: string[], frequency: Frequency, plotWidth: number) {
+function timeTicks(dates: string[], frequency: Frequency, plotWidth: number, labels?: string[]) {
   const ticks: { index: number; label: string }[] = [];
+  if (labels) {
+    const gap = Math.max(1, Math.ceil((labels.length * 44) / Math.max(plotWidth, 1)));
+    return labels.flatMap((label, index) => (index % gap === 0 ? [{ index, label }] : []));
+  }
   const years = dates.map(yearOf);
   const yearStarts = years.flatMap((year, i) => (i > 0 && year !== years[i - 1] ? [i] : []));
   if (yearStarts.length >= 2) {
@@ -97,6 +107,9 @@ export function LineChart({
   markerLabel,
   frequency,
   height = 340,
+  labels,
+  formatValue = num,
+  formatTick = short,
 }: ChartProps) {
   const [ref, width] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
@@ -128,7 +141,11 @@ export function LineChart({
     return { x: xScale, y: yScale, yTicks: yScale.ticks(5) };
   }, [series, band, dates.length, plotWidth, plotHeight]);
 
-  const xTicks = useMemo(() => timeTicks(dates, frequency, plotWidth), [dates, frequency, plotWidth]);
+  const xTicks = useMemo(
+    () => timeTicks(dates, frequency, plotWidth, labels),
+    [dates, frequency, plotWidth, labels],
+  );
+  const nameOf = (index: number) => (labels ? labels[index] : period(dates[index], frequency));
 
   const path = line<number | null>()
     .defined((value) => value !== null)
@@ -170,9 +187,8 @@ export function LineChart({
       : null;
   const tipOnLeft = hover !== null && x(hover) > MARGIN.left + plotWidth * 0.55;
 
-  const summary = `${series.map((s) => s.label).join(", ")} from ${period(dates[0], frequency)} to ${period(
-    dates[dates.length - 1],
-    frequency,
+  const summary = `${series.map((s) => s.label).join(", ")} from ${nameOf(0)} to ${nameOf(
+    dates.length - 1,
   )}. Use the left and right arrow keys to read values.`;
 
   return (
@@ -192,7 +208,7 @@ export function LineChart({
             <g key={tick}>
               <line className="grid" x1={MARGIN.left} x2={MARGIN.left + plotWidth} y1={y(tick)} y2={y(tick)} />
               <text className="tick" x={MARGIN.left - 8} y={y(tick)} dy="0.32em" textAnchor="end">
-                {short(tick)}
+                {formatTick(tick)}
               </text>
             </g>
           ))}
@@ -209,7 +225,7 @@ export function LineChart({
               className="tick"
               x={x(tick.index)}
               y={MARGIN.top + plotHeight + 17}
-              textAnchor={tick.index === 0 ? "start" : "middle"}
+              textAnchor={tick.index === 0 && !labels ? "start" : "middle"}
             >
               {tick.label}
             </text>
@@ -318,11 +334,11 @@ export function LineChart({
           className="chart-tip"
           style={tipOnLeft ? { right: width - x(hover) + 14 } : { left: x(hover) + 14 }}
         >
-          <div className="when">{period(dates[hover], frequency)}</div>
+          <div className="when">{nameOf(hover)}</div>
           {hovered.map(({ s, value }) => (
             <div className="line" key={s.id}>
               <span className="key" style={{ color: s.color }} />
-              <span className="value">{num(value)}</span>
+              <span className="value">{formatValue(value)}</span>
               <span className="name">{s.label}</span>
             </div>
           ))}
@@ -330,7 +346,7 @@ export function LineChart({
             <div className="line">
               <span className="key box" style={{ color: "var(--band)" }} />
               <span className="value">
-                {num(hoveredBand.low)} – {num(hoveredBand.high)}
+                {formatValue(hoveredBand.low)} – {formatValue(hoveredBand.high)}
               </span>
               <span className="name">{band.label}</span>
             </div>
@@ -343,7 +359,8 @@ export function LineChart({
 }
 
 /** The same numbers as a table: every chart has one. */
-export function ChartTable({ dates, series, band, frequency }: ChartProps) {
+export function ChartTable({ dates, series, band, frequency, labels, formatValue = num }: ChartProps) {
+  const write = (value: number | null) => (value === null ? "–" : formatValue(value));
   const rows = dates
     .map((date, i) => ({ date, i }))
     .filter(({ i }) => series.some((s) => s.values[i] !== null) || (band && band.low[i] !== null));
@@ -352,7 +369,7 @@ export function ChartTable({ dates, series, band, frequency }: ChartProps) {
       <table className="data compact">
         <thead>
           <tr>
-            <th style={{ position: "sticky", top: 0 }}>Period</th>
+            <th style={{ position: "sticky", top: 0 }}>{labels ? "" : "Period"}</th>
             {series.map((s) => (
               <th key={s.id} className="r" style={{ position: "sticky", top: 0 }}>
                 {s.label}
@@ -371,18 +388,18 @@ export function ChartTable({ dates, series, band, frequency }: ChartProps) {
           </tr>
         </thead>
         <tbody>
-          {rows.reverse().map(({ date, i }) => (
+          {(labels ? rows : rows.reverse()).map(({ date, i }) => (
             <tr key={date}>
-              <td className="nowrap">{period(date, frequency)}</td>
+              <td className="nowrap">{labels ? labels[i] : period(date, frequency)}</td>
               {series.map((s) => (
                 <td key={s.id} className="r">
-                  {num(s.values[i])}
+                  {write(s.values[i])}
                 </td>
               ))}
               {band && (
                 <>
-                  <td className="r">{num(band.low[i])}</td>
-                  <td className="r">{num(band.high[i])}</td>
+                  <td className="r">{write(band.low[i])}</td>
+                  <td className="r">{write(band.high[i])}</td>
                 </>
               )}
             </tr>
@@ -455,4 +472,3 @@ export function ChartFigure({ title, subtitle, actions, note, ...chart }: Figure
   );
 }
 
-export { monthOf };

@@ -22,6 +22,17 @@ export function short(value: number | null | undefined): string {
   return Math.abs(value) >= 10000 ? compact.format(value) : num(value);
 }
 
+const headline = new Intl.NumberFormat("en-US", { notation: "compact", maximumSignificantDigits: 3 });
+
+/** A headline figure: 5.06M, 651K, 1,284. Three digits, so two close totals do not read the same. */
+export function figure(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "–";
+  return Math.abs(value) >= 10000 ? headline.format(value) : num(value);
+}
+
+/** A word with its first letter raised: month becomes Month. */
+export const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+
 /** A ratio as a percent: 0.138 becomes 13.8%. */
 export function pct(value: number | null | undefined, digits = 1): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "–";
