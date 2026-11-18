@@ -32,6 +32,7 @@ class SliceRequest(BaseModel):
     history_start: str | None = None
     history_end: str | None = None
     minimum_history: int | None = None
+    target_column: str | None = None
     horizon: int = 12
     cutoffs: int = 0
     cutoff_step: int = 1
@@ -44,6 +45,7 @@ class SliceRequest(BaseModel):
             history_start=self.history_start,
             history_end=self.history_end,
             minimum_history=self.minimum_history,
+            target_column=self.target_column or None,
         )
 
 

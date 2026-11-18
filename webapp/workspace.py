@@ -16,6 +16,7 @@ import logging
 import math
 import re
 import threading
+import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -44,6 +45,8 @@ logger = logging.getLogger(__name__)
 # A slice is refused above these sizes, before it is loaded.
 MAX_SLICE_ROWS = 5_000_000
 MAX_SERIES = 25_000
+DATES_FRESH_SECONDS = 60
+"""How long the dates of a history table are trusted before it is asked again for new rows."""
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 # Measured on the workbench model with 4 vCPU: see docs/decisions.md, check 6.
 SECONDS_PER_SERIES_BLOCK = 0.0027
@@ -112,6 +115,8 @@ class SliceSpec:
     history_start: str | None = None
     history_end: str | None = None
     minimum_history: int | None = None
+    target_column: str | None = None
+    """The number to forecast. None means the one chosen when the dataset was added."""
 
     def key(self) -> str:
         chosen = {column: sorted(map(str, values)) for column, values in self.slice_filter.items()}
@@ -123,6 +128,7 @@ class SliceSpec:
                 self.history_start,
                 self.history_end,
                 self.minimum_history,
+                self.target_column,
             ]
         )
 
@@ -139,6 +145,9 @@ class _Recent:
             self._items.move_to_end(key)
             return self._items[key]
         return None
+
+    def clear(self) -> None:
+        self._items.clear()
 
     def put(self, key: str, value: Any) -> None:
         self._items[key] = value
@@ -171,6 +180,7 @@ class Workspace:
         self._bands: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         self._sources: dict[str, dict[str, Any]] = {}
         self._dates: dict[str, pd.DatetimeIndex] = {}
+        self._dates_read: dict[str, float] = {}
         self._dimension_values: dict[tuple[str, str], list[Any]] = {}
 
     # Starting up
@@ -248,6 +258,24 @@ class Workspace:
             "issues": len(mine),
         }
 
+    def number_columns(self, record: DatasetRecord) -> list[str]:
+        """Return the columns of a dataset that can be forecast: its numbers, the usual one first."""
+        taken = {record.date_column, *record.dimension_columns}
+        numeric = [
+            column["name"]
+            for column in self.source(record.source_table)["columns"]
+            if column["type"].startswith(NUMBER_TYPES) and column["name"] not in taken
+        ]
+        return sorted(set(numeric) | {record.target_column}, key=lambda c: c != record.target_column)
+
+    def target(self, record: DatasetRecord, chosen: str | None) -> str:
+        """Return the column to forecast: the one asked for, or the dataset's usual one."""
+        if not chosen or chosen == record.target_column:
+            return record.target_column
+        if chosen not in self.number_columns(record):
+            raise UserError(f"{chosen} is not a number column of {record.dataset}.")
+        return chosen
+
     def source(self, table: str) -> dict[str, Any]:
         """Return what a history table holds: its columns, its size and its first rows."""
         if table not in self._sources:
@@ -273,10 +301,18 @@ class Workspace:
 
     def dates(self, record: DatasetRecord) -> pd.DatetimeIndex:
         """Return the dates a dataset has data for, in order."""
-        if record.dataset not in self._dates:
+        read = self._dates_read.get(record.dataset)
+        if read is None or time.monotonic() - read > DATES_FRESH_SECONDS:
             with self._lock:
                 found = self.store.distinct_dates(record.source_table, record.date_column)
-            self._dates[record.dataset] = pd.DatetimeIndex(pd.to_datetime(found)).sort_values()
+            dates = pd.DatetimeIndex(pd.to_datetime(found)).sort_values()
+            before = self._dates.get(record.dataset)
+            if before is not None and not before.equals(dates):
+                # The table got new rows: what was read from it is out of date.
+                self._panels.clear()
+                self._sources.pop(record.source_table, None)
+            self._dates[record.dataset] = dates
+            self._dates_read[record.dataset] = time.monotonic()
         return self._dates[record.dataset]
 
     def dataset_overview(self, name: str) -> dict[str, Any]:
@@ -285,6 +321,7 @@ class Workspace:
         return {
             **self._dataset_json(record),
             "source": self.source(record.source_table),
+            "number_columns": self.number_columns(record),
             "dates": [iso(date) for date in dates],
             "minimum_history": minimum_history(record.frequency),
             "minimum_history_floor": min(minimum_history(record.frequency), 32),
@@ -436,6 +473,7 @@ class Workspace:
         unknown += [c for c in spec.slice_filter if c not in record.dimension_columns]
         if unknown:
             raise UserError(f"{', '.join(unknown)} is not a dimension column of {spec.dataset}.")
+        target = self.target(record, spec.target_column)
         window = {
             "date_column": record.date_column,
             "slice_filter": spec.slice_filter,
@@ -453,14 +491,14 @@ class Workspace:
                 )
             frame = self.store.load_slice(
                 record.source_table,
-                target_column=record.target_column,
+                target_column=target,
                 dimension_columns=spec.dimension_columns,
                 **window,
             )
         panel = prepare(
             frame,
             date_column=record.date_column,
-            target_column=record.target_column,
+            target_column=target,
             dimension_columns=spec.dimension_columns,
             frequency=record.frequency,
             minimum_history_override=spec.minimum_history,
@@ -647,6 +685,7 @@ class Workspace:
                 history_start=iso(record.history_start_date),
                 history_end=iso(end),
                 minimum_history=record.minimum_history or None,
+                target_column=record.target_column,
             )
         )
 
@@ -763,7 +802,7 @@ class Workspace:
                     horizon=horizon,
                     forecast_name=name,
                     dataset=dataset.dataset,
-                    target_column=dataset.target_column,
+                    target_column=self.target(dataset, spec.target_column),
                     slice_filter=spec.slice_filter,
                 ),
             )

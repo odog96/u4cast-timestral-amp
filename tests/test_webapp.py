@@ -1,5 +1,6 @@
 """The web server, end to end, with an in-memory store and the stand-in model."""
 
+import datetime as dt
 import io
 import time
 
@@ -416,3 +417,66 @@ def test_unknown_addresses(client):
     page = client.get("/datasets/anything")
     assert page.status_code == 503
     assert "front end is not built" in page.text
+
+
+def with_dollars() -> pd.DataFrame:
+    """The sales table with a second number column: a bottle costs 10 dollars."""
+    frame = sales()
+    frame["dollars"] = frame["bottles"] * 10
+    return frame
+
+
+def test_a_forecast_chooses_which_number_to_forecast(tmp_path):
+    store = FakeStore()
+    store.add_table("sales", with_dollars())
+    workspace = Workspace(lambda: store, StandInForecaster())
+    workspace.connect()
+    client = TestClient(create_app(workspace, front_end=tmp_path))
+    add_dataset(client)
+    # The dataset's usual number comes first; the others can be chosen per forecast.
+    assert client.get("/api/datasets/Sales").json()["number_columns"] == ["bottles", "dollars"]
+
+    new_forecast(client, cutoffs=0)
+    new_forecast(client, forecast_name="Revenue", target_column="dollars", cutoffs=2)
+    targets = {record.forecast_name: record.target_column for record in store.saved_forecasts}
+    assert targets == {"Monthly demand": "bottles", "Revenue": "dollars"}
+
+    def last_actual(name: str) -> float:
+        overview = client.get(f"/api/datasets/Sales/forecasts/{name}").json()
+        chart = client.get(f"/api/forecasts/{overview['issues'][0]['forecast_id']}/chart").json()
+        assert chart["target"] == ("dollars" if name == "Revenue" else "bottles")
+        return [value for value in chart["actual"] if value is not None][-1]
+
+    assert last_actual("Revenue") == pytest.approx(10 * last_actual("Monthly demand"))
+
+    # A reissue and the accuracy check keep the forecast's own number.
+    again = client.post("/api/datasets/Sales/forecasts/Revenue/reissue", json={"as_of": "2024-12-01"})
+    assert finish(client, again)["state"] == "done"
+    assert store.saved_forecasts[-1].target_column == "dollars"
+    accuracy = client.get("/api/datasets/Sales/forecasts/Revenue/accuracy").json()
+    assert accuracy["target"] == "dollars"
+
+    refused = client.post(
+        "/api/datasets/Sales/slice",
+        json={"dimension_columns": ["sku"], "target_column": "county"},
+    )
+    assert refused.status_code == 400
+    assert "not a number column" in refused.json()["detail"]
+
+
+def test_new_rows_in_the_history_table_are_noticed(client, store, monkeypatch):
+    monkeypatch.setattr("webapp.workspace.DATES_FRESH_SECONDS", 0)
+    add_dataset(client)
+    assert client.get("/api/datasets/Sales").json()["dates"][-1] == "2025-04-01"
+    new_forecast(client, cutoffs=0)
+    # A month of new sales lands in the table.
+    more = sales()[lambda frame: frame["month"] == MONTHS[-1].date()].assign(
+        month=dt.date(2025, 5, 1)
+    )
+    store.frames["fake.sales"] = pd.concat([store.frames["fake.sales"], more], ignore_index=True)
+    assert client.get("/api/datasets/Sales").json()["dates"][-1] == "2025-05-01"
+    overview = client.get("/api/datasets/Sales/forecasts/Monthly demand").json()
+    assert overview["reissue_dates"][-1] == "2025-05-01"
+    job = finish(client, client.post("/api/datasets/Sales/forecasts/Monthly demand/reissue", json={}))
+    assert job["state"] == "done", job
+    assert store.saved_forecasts[-1].history_end_date == dt.date(2025, 5, 1)
