@@ -1,0 +1,112 @@
+name: u4cast with Timestral
+description: >-
+  Forecast hundreds to thousands of time series at once with Mistral's
+  Timestral model, and keep every forecast in Iceberg tables. A web
+  application for demand forecasting teams that do not write code. This is a
+  reference example, not something Cloudera runs in production. The Timestral
+  weights have their own license from Mistral, separate from this project's
+  code license, and each user is responsible for checking and complying with
+  it.
+author: Oliver Zarate
+specification_version: 1.0
+prototype_version: 1.0
+date: "2026-11-18"
+
+environment_variables:
+  HF_TOKEN:
+    default: ""
+    description: >-
+      Optional. A Hugging Face access token, used to download the Timestral
+      weights. The download works without one; with one, Hugging Face allows
+      more requests. By downloading the weights you accept Mistral's license
+      for them, which is separate from this project's license.
+    required: false
+  U4CAST_DATABASE:
+    default: "u4cast"
+    description: >-
+      The database in the data lake that holds the demo data and everything
+      the application writes. It is created if it does not exist.
+    required: true
+  U4CAST_MODEL_NAME:
+    default: "mistralai/Timestral-209M"
+    description: >-
+      The Timestral model to serve, by its Hugging Face name.
+    required: true
+
+runtimes:
+  - editor: PBJ Workbench
+    kernel: Python 3.12
+    edition: Standard
+
+tasks:
+  - type: run_session
+    name: Install dependencies
+    script: amp/1_install_dependencies.py
+    short_summary: Installing the Python packages
+    long_summary: >-
+      Installs the packages listed in uv.lock into the virtual environment
+      .venv, including torch, Timestral and Node. This takes about ten
+      minutes.
+    kernel: python3
+    cpu: 2
+    memory: 8
+
+  - type: run_session
+    name: Build the front end
+    script: amp/2_build_front_end.py
+    short_summary: Building the React front end
+    long_summary: >-
+      Installs the front end's packages from the npm registry and builds it
+      into frontend/dist, which the web server serves.
+    kernel: python3
+    cpu: 2
+    memory: 4
+
+  - type: run_session
+    name: Download the model weights
+    script: amp/3_download_weights.py
+    short_summary: Downloading the Timestral weights from Hugging Face
+    long_summary: >-
+      Downloads the weights of the Timestral model, about 840 MB. They have
+      their own license from Mistral; you are responsible for checking and
+      complying with it.
+    kernel: python3
+    cpu: 2
+    memory: 4
+
+  - type: run_session
+    name: Ingest the demo data
+    script: amp/4_ingest_demo_data.py
+    short_summary: Ingesting Iowa liquor sales into Iceberg tables with Spark
+    long_summary: >-
+      Downloads Iowa liquor sales for 2022 through 2026, about 2.8 GB, from
+      the Iowa Data Hub, and writes two clean Iceberg tables with Spark. It
+      runs as a job named "u4cast: ingest demo data". Source: Iowa Department
+      of Revenue, Alcoholic Beverages Division, CC BY 4.0.
+    kernel: python3
+    cpu: 2
+    memory: 4
+
+  - type: run_session
+    name: Deploy the model
+    script: amp/5_deploy_model.py
+    short_summary: Deploying Timestral as a workbench model
+    long_summary: >-
+      Creates the workbench model "timestral", builds its image and deploys
+      it, through Cloudera AI's API. The application sends its forecasts to
+      this model's endpoint.
+    kernel: python3
+    cpu: 2
+    memory: 4
+
+  - type: run_session
+    name: Start the application
+    script: amp/6_start_application.py
+    short_summary: Starting the u4cast application
+    long_summary: >-
+      Creates and starts the application "u4cast" through Cloudera AI's API,
+      with the Spark and Hadoop CLI runtime add-ons. Open it from the
+      Applications page.
+    kernel: python3
+    cpu: 2
+    memory: 4
