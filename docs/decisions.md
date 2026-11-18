@@ -1405,3 +1405,9 @@ Claude Code adds dated lines here.
   from the reference repeating a one-off stretch of the data a year later.
 - 18 November 2026. Stored five more worked examples in the application, at
   the levels the test covers. Added open question 12.
+- 18 November 2026. Added `docs/test-drive.md`, a walk through every screen
+  with what to expect at each step, and `docs/sample-sales.csv`, a made-up
+  file for trying the CSV upload. Why: Oliver asked where the steps to test
+  the application were, and they were only in a chat message. The CSV
+  upload was run through the running application: the table was created and
+  its columns and frequency were detected. The test table was dropped.

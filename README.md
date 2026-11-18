@@ -108,6 +108,7 @@ writes to a table of history.
 | `ingest/` | The demo data download and the Spark ingest. |
 | `amp/` | The six install steps. |
 | `docs/decisions.md` | Why each thing is the way it is, with every measurement. |
+| `docs/test-drive.md` | A walk through every screen, with what you should see at each step. `docs/sample-sales.csv` is a made-up file for trying the CSV upload. |
 
 The model is called through one small interface. Two implementations exist:
 the workbench model endpoint, which the application uses, and Timestral
