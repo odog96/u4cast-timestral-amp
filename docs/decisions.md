@@ -177,6 +177,19 @@ session, after seeing how many series the demo data lost.
     nothing was ordered. The choices and their exact meaning are Claude's
     and are listed under "Proposed by Claude".
 
+Decision 36 was made by Oliver on 18 November 2026 in a Claude Code session.
+
+36. **The demo uses clean cuts of the data: every series complete, and all
+    series the same length.** Oliver: "We're not trying to tackle irregular
+    data sets. Let's take cuts of this data set that don't present new
+    challenges for us. If we have a set of 100 series of data, let's just
+    make sure that all those series are complete and both the same size."
+    And later: "don't spend too much time fixing Iowa data. If you need to,
+    run a primary pipeline to either filter or aggregate to a clean data
+    set." The handling of gaps (decision 35) stays in the code; the demo
+    does not depend on it. This changes decision 33: which cuts are clean
+    was left to Claude and is listed under "Proposed by Claude".
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -304,6 +317,84 @@ November 2026.
 - **A table made by an earlier version gets new columns added,** not
   recreated. That is how the existing tables got the `fill` column.
 
+The following follow from decision 36 and were chosen on 18 November 2026.
+
+- **The demo tables.** The ingest writes two, and keeps only the series that
+  have a row in every period:
+  - `iowa_liquor_monthly`: monthly totals per county and item. 6,892 series
+    of 58 months, January 2022 to October 2026, 399,736 rows. Columns
+    `month`, `county`, `category`, `vendor`, `item`, `bottles`, `dollars`,
+    `liters`. This is the main demo dataset.
+  - `iowa_liquor_weekly`: weekly totals per item, statewide. 300 series of
+    252 weeks. It is there to show a second frequency.
+- **Why monthly, and why county instead of store.** Weekly totals per store
+  and item, as decision 33 had it, cannot be made clean: 3 of 1,417,157
+  store and item pairs have an order in every week. Monthly per store and
+  item has 1,912 complete pairs, but only 8 stores have 20 or more. Monthly
+  per county and item has 6,892, and it matches Oliver's own example of 100
+  SKUs forecast monthly and reissued every month.
+- **A total in these tables is a total of the kept series,** not of all sales.
+  The kept county and item pairs hold 58.6% of the bottles.
+- **The data has two stretches at about twice the usual level,** December
+  2022 and August to October 2025. They were not investigated, at Oliver's
+  word. They look like real bulk orders, not duplicated rows: single items
+  do not double.
+
+The following were chosen while building the web server, the front end and
+the application on 18 November 2026.
+
+- **Spark runs inside the application's own container, with no separate
+  workers.** The setting `U4CAST_SPARK_MODE` switches to workers on the
+  cluster. Reason: on this cluster Spark's workers kept disappearing, about
+  one every 90 seconds, and a simple count crawled. Inside the container
+  Spark starts in 7 seconds and reads a slice of 784,000 rows in 9. The
+  ingest of 2.8 GB runs the same way in 3.5 minutes.
+- **The web server is in `webapp/` and the front end in `frontend/`.** The
+  front end is React with TypeScript, built with Vite into `frontend/dist`,
+  which the web server serves. `frontend/dist` is not in git.
+- **Work that takes long runs as a background job, one at a time.** A
+  forecast, a reissue and an accuracy check each return at once with a job,
+  and the screen shows its progress. Reason: the model answers one request
+  at a time, and a web request should not stay open for minutes.
+- **The server keeps what it has read.** The lists of datasets and
+  forecasts, the last 6 slices and the last 40 forecasts' values stay in
+  memory. A chart that was shown once answers in a hundredth of a second.
+- **A slice is refused above 5 million rows of history or 25,000 series,**
+  before it is loaded, with a message to narrow the filter.
+- **A forecast name is used once per dataset.** Making it again is a
+  reissue.
+- **A reissue can be "as of" any date that has no issue yet,** not only the
+  latest data. Reason: a demo has to show reissues, and no new data arrives
+  during a demo. With it, an issue is made for June, then July, then August.
+- **The range of a total comes from forecasting the total itself.** The lows
+  and highs of single series cannot be added up: their sum is far wider
+  than the range of the total. The line of the total is the sum of the
+  series' forecasts; its range is taken, as shares of the forecast, from one
+  extra model call on the summed history. It is not stored.
+- **Accuracy is computed when it is looked at,** from the stored backtest
+  forecasts and the history. Only the forecasts are stored.
+- **At most the 5 newest issues are compared in one chart.** Reason: they are
+  drawn in five steps of one blue, older lighter, and a sixth step cannot be
+  told apart from its neighbor.
+- **Each forecast also stores the minimum history it used,** in a column
+  `minimum_history`, so a reissue applies the same.
+- **Creation times are UTC.** Storage hands them back without a time zone,
+  and they are read as UTC.
+- **The look.** One typeface (Inter), warm off-white surfaces, black for
+  actions and one blue for the forecast. Charts follow fixed rules: actuals
+  in neutral gray, the forecast in blue, its range as a light wash, a
+  crosshair that reads every value, and a table view of every chart. The
+  chart colors passed a color-blindness check in light and dark mode. There
+  is a dark mode.
+- **The application is started by `webapp/launch.py`** and created by
+  `webapp/deploy_application.py`: 4 vCPU and 8 GB, the Python 3.12 Standard
+  PBJ Workbench runtime, and two runtime add-ons, Spark and Hadoop CLI.
+- **The AMP's steps are all scripts run in a session.** The scripts create
+  the ingest job, the model and the application through Cloudera AI's API.
+  Reason: the Spark and Hadoop add-ons have a different version name in
+  every workbench, and a script can look the name up where the AMP file
+  would have to spell it out.
+
 ## Open questions
 
 1. **Who is named as the copyright owner?** Apache 2.0 asks for a short
@@ -332,7 +423,23 @@ November 2026.
 8. **Add pyarrow to speed up loading slices?** Moving rows from Spark to
    pandas takes most of the 4 to 14 seconds a slice needs. pyarrow is the
    standard way to speed that up and is not in the runtime. Claude's
-   recommendation: add it as a dependency and measure.
+   recommendation: add it as a dependency and measure. Less pressing since
+   decision 36: a slice of the clean demo table loads in 3 seconds.
+9. **What should the demo say about accuracy?** On the worked example, 88
+   vodka SKUs in Polk county, Timestral's backtest error equals that of
+   repeating the value of a year earlier: WAPE 0.287 against 0.289. On 833
+   Polk SKUs it was 0.301 against 0.309. So at the level of a single SKU and
+   month, on this data, the model is no better than the reference. It was
+   clearly better at coarser levels (see "Decision 35 on the demo data").
+   Claude's recommendation: show accuracy in the demo as the honest check it
+   is, and choose the slice knowing this.
+10. **Has the AMP been installed from scratch?** No. `.project-metadata.yaml`
+    and its scripts are written, and each script was run in this project,
+    but the AMP as a whole has not been installed into a new project. That
+    needs the repo on GitHub first.
+11. **Why do Claude Code's sessions keep ending?** Seven ended during this
+    work, several while a second Spark was running next to other work. No
+    log shows the cause. It may be memory.
 
 ## Demo dataset comparison (17 November 2026)
 
@@ -938,6 +1045,70 @@ first row, all 252 weeks:
   last week. This one includes stores that order rarely.
 - Memory in the 3.9 GB session reached 3.3 GB during this run.
 
+## Web server, front end and application: results (18 November 2026)
+
+### What runs
+
+- The application is a Cloudera AI application named `u4cast`, at
+  `https://u4cast.<the workbench's domain>`. It was created by
+  `webapp/deploy_application.py`.
+- It is one process: a FastAPI web server that also serves the React front
+  end, as `CLAUDE.md` asks.
+- The screens, in order: datasets; add a dataset (choose a table or upload a
+  CSV, then pick its columns); a dataset with its forecasts and its history;
+  new forecast (one series per which columns, filter, history window, how
+  far ahead, accuracy check); and a forecast with four views: the chart with
+  a searchable series picker, issues compared side by side with actuals,
+  accuracy by series worst first, and the stored rows with ready-made SQL
+  and a CSV download.
+- 156 tests run without Spark or the model, 15 of them on the web server
+  end to end with an in-memory store and the stand-in model. 12 more need
+  Spark or the weights.
+
+### What was checked against the real data lake and model
+
+- The whole flow through the API, and again by driving the screens in a
+  headless browser: filter, create, progress, open, reissue, compare.
+- From the application's own container: 88 series of 54 months, 12 months
+  ahead, with an accuracy check from 4 past dates, in 15 seconds. Each
+  reissue in 5 seconds.
+- From a session: 833 series with an accuracy check from 3 past dates in 33
+  seconds; a reissue of 833 series in 8 to 10 seconds.
+- Loading a slice of the demo table takes 3 seconds the first time. After
+  that every chart, list and table answered in under 0.15 seconds.
+- A worked example is stored: "Polk county vodka", 88 series, issued with
+  history to June, July, August and September 2026, with an accuracy check.
+  October 2026 is left open, to be reissued live.
+
+### What an application's container is, as found
+
+- `CDSW_APP_PORT` is 8100 there. The server listens on 127.0.0.1 and that
+  port, and Cloudera AI serves it at the application's address. This is the
+  verification `CLAUDE.md` asked for. In a session with JupyterLab the same
+  variable is 8090 and JupyterLab itself uses that port.
+- `CDSW_APIV2_KEY` is set there, so the application can call the workbench
+  model with authentication on.
+- The project's environment variables are there, including
+  `U4CAST_MODEL_ACCESS_KEY`.
+- **Spark does not find the data lake's catalog there unless it is told.**
+  In a session, Cloudera AI puts the Hadoop settings and the Hive client
+  libraries on Spark's path. In an application it does not, and Spark
+  starts an empty catalog of its own in the project folder. The project now
+  sets both itself, in `u4cast.storage.spark_environment`.
+- The application needs the Hadoop CLI add-on next to the Spark add-on.
+- Everything is Iceberg. The tables report the provider `iceberg` and the
+  format `iceberg/parquet`, version 2. The Hive Metastore that Spark talks
+  to is only the catalog, the list of where each table is.
+
+### Notes for later Claude Code sessions
+
+- Commit often. Sessions ended without warning seven times in two days.
+- Do not start a second Spark while the test server is running.
+- A headless browser works here for looking at the screens:
+  `.timestral-checks/shot.sh` (Playwright's Chromium, with eight system
+  libraries unpacked into `.timestral-checks/syslibs`). It is not in git.
+- `.timestral-checks/serve.sh start` runs the server on port 8123 for tests.
+
 ## What the old code did (reference only)
 
 Three private repos were read on 17 November 2026:
@@ -1076,3 +1247,24 @@ Claude Code adds dated lines here.
 - 17 November 2026. Open question 7 is answered by decision 35. The tables
   `datasets` and `forecasts` in the database `u4cast` got a `fill` column,
   and the Iowa dataset is set to zero.
+- 18 November 2026. Decision 36: the demo uses clean cuts. The ingest now
+  writes monthly totals per county and item and weekly totals per item,
+  complete series only. This changes decision 33. Why: Oliver asked for it,
+  and weekly totals per store and item have 3 complete series.
+- 18 November 2026. Spark now runs inside the container by default. Why: its
+  workers kept disappearing on this cluster.
+- 18 November 2026. Built the web server (`webapp/`) and the front end
+  (`frontend/`), and started them as the Cloudera AI application `u4cast`.
+  Results are in "Web server, front end and application: results". Order of
+  work steps 1 to 4 are done.
+- 18 November 2026. Fixed three faults found on the way: creation times read
+  back from storage could not be compared with new ones; Spark could not
+  reach the catalog from an application's container; and the first
+  application lacked the Hadoop CLI add-on.
+- 18 November 2026. Oliver asked whether the tables are Iceberg and not
+  Hive. They are Iceberg; this was checked on each table and is recorded.
+- 18 November 2026. Removed the forecasts made while testing and stored one
+  worked example, "Polk county vodka".
+- 18 November 2026. Added open questions 9 (what the demo says about
+  accuracy), 10 (the AMP has not been installed from scratch) and 11 (why
+  sessions keep ending).

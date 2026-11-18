@@ -94,9 +94,11 @@ are in this file, which loads with this one:
 
 - Two sources: an Iceberg table (Iceberg is the table format of Cloudera's
   data lake), and CSV upload.
-- The demo data is ingested into an Iceberg table with Spark by an AMP step.
-  Cap what is pulled in at 1 to 5 GB. The ingest writes weekly totals per
-  store and item.
+- The demo data is ingested into Iceberg tables with Spark by an AMP step.
+  Cap what is pulled in at 1 to 5 GB. The ingest writes clean cuts, in which
+  every series is complete and all series have the same length: monthly
+  totals per county and item, and weekly totals per item. Decision 36 in
+  `docs/decisions.md` gives the reasons.
 - The application does not change the frequency of a dataset. The rows of a
   dataset must already be daily, weekly, monthly or quarterly.
 - The full table stays in Iceberg. A forecast is made for a slice of it: the
@@ -214,8 +216,10 @@ tables. The application never writes to a history table.
 - Resource profile for the application and for the workbench model: 4 vCPU
   and 8 GB of memory each.
 - The application must listen on the port Cloudera AI assigns (environment
-  variable `CDSW_APP_PORT`, address `127.0.0.1`). Verify this in the target
-  environment before relying on it.
+  variable `CDSW_APP_PORT`, address `127.0.0.1`). Verified on 18 November
+  2026.
+- Spark runs inside the application's own container by default, and the
+  application needs the Spark and the Hadoop CLI runtime add-ons.
 - The README and the AMP description must say three things: the Timestral
   weights have their own license from Mistral, separate from this repo's code
   license; each user is responsible for checking and complying with it; and
@@ -239,11 +243,13 @@ tables. The application never writes to a history table.
 
 ## Order of work
 
-1. The checks below.
-2. The forecasting package with its tests.
-3. The storage layer and the demo data ingest.
-4. The web server and front end.
-5. The AMP packaging.
+1. The checks below. Done.
+2. The forecasting package with its tests. Done: `src/u4cast/`.
+3. The storage layer and the demo data ingest. Done: `src/u4cast/storage.py`
+   and `ingest/`.
+4. The web server and front end. Done: `webapp/` and `frontend/`.
+5. The AMP packaging. Written, not yet installed from scratch: see open
+   question 10 in `docs/decisions.md`.
 
 ## First build step: check what is not yet verified
 
