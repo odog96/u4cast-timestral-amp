@@ -27,7 +27,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from deploy_workbench_model import deploy  # noqa: E402
+from deploy_workbench_model import deploy
 
 logger = logging.getLogger("u4cast.deploy_more_models")
 
