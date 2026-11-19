@@ -1642,3 +1642,18 @@ Claude Code adds dated lines here.
   reads the model's access key and the caller's key from the environment and
   prints neither. It was run top to bottom in a session and passed. It is
   committed without outputs, because of rule 4.
+- 19 November 2026. Decision 40 built: schedules, the job of a forecast in
+  production, the record of runs, the track record and the Production tab.
+  A fault found by its test and fixed: a run just after new data arrived
+  could reuse a kept copy of the history and report no new data.
+- 19 November 2026. Proof on a compressed clock. `production/proof_data.py`
+  made the table `proof_weekly_sales`, the weekly demo table held 10 weeks
+  back, and a job adds one week of the real data every ten minutes. The
+  forecast "SKUs, 4 weeks ahead, in production" on it was promoted through
+  the application with the schedule `5-59/10 * * * *`. Cloudera AI ran both
+  jobs on time: data at 15:20 and 15:30 UTC, the forecast at 15:25 and
+  15:35, each run issuing 300 series in 16 seconds from the week that had
+  just arrived. After two runs the track record showed 13.9% against
+  actuals. The reference shows 108.6% there, because a year earlier those
+  weeks fall in the unusual stretch of 2025; it is not a fair yardstick on
+  these dates.
