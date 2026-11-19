@@ -414,6 +414,39 @@ class Store:
         result["date"] = pd.to_datetime(result["date"])
         return result.sort_values(["forecast_id", TS_ID, "step"], ignore_index=True)
 
+    # Cleaning up
+
+    def table_size(self, table: str) -> dict[str, int]:
+        """Return how many rows a table of this database holds and how many bytes its files take."""
+        name = _table(self.database, table)
+        if not self.spark.catalog.tableExists(f"{self.database}.{table}"):
+            return {"rows": 0, "bytes": 0}
+        # Iceberg lists a table's data files, with the rows and bytes of each.
+        row = self.spark.sql(
+            f"select coalesce(sum(record_count), 0), coalesce(sum(file_size_in_bytes), 0) "
+            f"from {name}.files"
+        ).collect()[0]
+        return {"rows": int(row[0]), "bytes": int(row[1])}
+
+    def delete_forecast(self, dataset: str, forecast_name: str, tables: Sequence[str]) -> None:
+        """Delete a forecast: drop its tables and remove its runs from the lists.
+
+        The row in the forecasts table goes first, so that a forecast that is
+        still listed always has its values.
+        """
+        chosen = {"dataset": dataset, "name": forecast_name}
+        for listing in ("forecasts", "production_runs", "schedules"):
+            self.spark.sql(
+                f"delete from {_table(self.database, listing)} "
+                "where dataset = :dataset and forecast_name = :name",
+                args=chosen,
+            )
+        for table in tables:
+            if not table.startswith("forecast_values_"):
+                raise ValueError(f"{table} is not a forecast table.")
+            self.spark.sql(f"drop table if exists {_table(self.database, table)}")
+        logger.info("Deleted the forecast %s of %s", forecast_name, dataset)
+
     # Looking at tables, for the screens that add a dataset
 
     def tables(self) -> list[str]:

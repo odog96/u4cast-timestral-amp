@@ -145,6 +145,36 @@ class FakeStore:
             if values["forecast_id"].iloc[0] in wanted
         }
 
+    def table_size(self, table: str) -> dict[str, int]:
+        rows = sum(
+            len(v)
+            for v, t in zip(self.saved_values, self.tables_written, strict=False)
+            if t == table
+        )
+        return {"rows": rows, "bytes": rows * 100}
+
+    def delete_forecast(self, dataset: str, forecast_name: str, tables) -> None:
+        gone = {
+            r.forecast_id
+            for r in self.saved_forecasts
+            if (r.dataset, r.forecast_name) == (dataset, forecast_name)
+        }
+        kept = [
+            (v, t)
+            for v, t in zip(self.saved_values, self.tables_written, strict=False)
+            if v["forecast_id"].iloc[0] not in gone
+        ]
+        self.saved_values = [v for v, _ in kept]
+        self.tables_written = [t for _, t in kept]
+        self.saved_forecasts = [r for r in self.saved_forecasts if r.forecast_id not in gone]
+        self.saved_schedules.pop((dataset, forecast_name), None)
+        self.saved_runs = [
+            r
+            for r in self.saved_runs
+            if (r["dataset"], r["forecast_name"]) != (dataset, forecast_name)
+        ]
+        self.dropped = [*getattr(self, "dropped", []), *tables]
+
     def create_table_from_frame(self, table: str, frame: pd.DataFrame) -> str:
         if f"{self.database}.{table}" in self.frames:
             raise ValueError(f"A table named {table} already exists.")

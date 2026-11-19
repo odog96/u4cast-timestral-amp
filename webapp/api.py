@@ -165,6 +165,16 @@ def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
     def tables_of(connection: str, database: str) -> list[dict[str, Any]]:
         return workspace.tables_of(connection, database)
 
+    # Cleaning up
+
+    @app.get("/api/cleanup")
+    def cleanup() -> dict[str, Any]:
+        return workspace.cleanup()
+
+    @app.delete("/api/datasets/{name}/forecasts/{forecast_name}")
+    def delete_forecast(name: str, forecast_name: str) -> dict[str, Any]:
+        return workspace.delete_forecast(name, forecast_name)
+
     # Sources
 
     @app.get("/api/sources")
@@ -208,7 +218,7 @@ def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
     def reissue(name: str, forecast_name: str, body: ReissueRequest) -> dict[str, Any]:
         workspace.dataset(name)
         job = jobs.submit(
-            f"Reissue {forecast_name}",
+            f"Run {forecast_name} again",
             lambda job: workspace.reissue(job, name, forecast_name, body.as_of),
         )
         return job.to_json()

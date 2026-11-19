@@ -200,6 +200,7 @@ class Workspace:
         self.scheduler = scheduler
         self._schedules: dict[tuple[str, str], Schedule] = {}
         self._stored_read = 0.0
+        self._table_sizes: dict[str, dict[str, int]] = {}
         self._connect = connect
         self._make_catalog = catalog
         self._catalog: Catalog | None = None
@@ -907,7 +908,7 @@ class Workspace:
             made = self.record(result["forecast_id"])
             run |= {
                 "outcome": ISSUED,
-                "detail": f"Issued with history to {made.history_end_date}.",
+                "detail": f"Ran with history to {made.history_end_date}.",
                 "forecast_id": made.forecast_id,
                 "history_end_date": made.history_end_date,
                 "series": result["series"],
@@ -916,7 +917,7 @@ class Workspace:
             last = self._issues(dataset, name, Kind.FORECAST)[-1].history_end_date
             run |= {
                 "outcome": NO_NEW_DATA,
-                "detail": f"No history after {last} has arrived. Nothing was issued.",
+                "detail": f"No history after {last} has arrived. Nothing was run.",
                 "history_end_date": last,
             }
         except Exception as error:
@@ -1011,6 +1012,91 @@ class Workspace:
             ],
             "track": self.track_record(dataset, name),
         }
+
+    # Cleaning up: forecasts that are not in production, and the tables they hold
+
+    def _in_production(self, dataset: str, name: str) -> bool:
+        schedule = self._schedules.get((dataset, name))
+        return schedule is not None and schedule.state != RETIRED
+
+    def cleanup(self) -> dict[str, Any]:
+        """List the forecasts that can be deleted, with the age and size of their tables.
+
+        A forecast in production, running or paused, is not listed. It has
+        to be taken out of production first.
+        """
+        self.refresh()
+        groups: dict[tuple[str, str], list[ForecastRecord]] = {}
+        for record in self._forecasts:
+            groups.setdefault((record.dataset, record.forecast_name), []).append(record)
+        listed = []
+        for (dataset, name), records in groups.items():
+            if self._in_production(dataset, name):
+                continue
+            tables = sorted({forecast_table(dataset, name, record.kind) for record in records})
+            sizes = [self._table_size(table) for table in tables]
+            runs = [record for record in records if record.kind is Kind.FORECAST]
+            listed.append(
+                {
+                    "dataset": dataset,
+                    "forecast_name": name,
+                    "tables": [f"{self.store.database}.{table}" for table in tables],
+                    "runs": len(runs),
+                    "test_runs": len(records) - len(runs),
+                    "rows": sum(size["rows"] for size in sizes),
+                    "bytes": sum(size["bytes"] for size in sizes),
+                    "first_run": min(record.created_at for record in records).isoformat(),
+                    "last_run": max(record.created_at for record in records).isoformat(),
+                }
+            )
+        listed.sort(key=lambda row: row["last_run"])
+        return {
+            "forecasts": listed,
+            "tables": sum(len(row["tables"]) for row in listed),
+            "bytes": sum(row["bytes"] for row in listed),
+            "oldest": listed[0]["last_run"] if listed else None,
+            "in_production": sum(
+                1 for (dataset, name) in groups if self._in_production(dataset, name)
+            ),
+        }
+
+    def _table_size(self, table: str) -> dict[str, int]:
+        kept = self._table_sizes.get(table)
+        if kept is None:
+            with self._lock:
+                kept = self.store.table_size(table)
+            self._table_sizes[table] = kept
+        return kept
+
+    def delete_forecast(self, dataset: str, name: str) -> dict[str, Any]:
+        """Delete a forecast for good: its tables, all its runs and its test runs.
+
+        This is the one place where the application removes what it stored.
+        A forecast in production is refused.
+        """
+        self.dataset(dataset)
+        self.refresh()
+        records = [r for r in self._forecasts if r.dataset == dataset and r.forecast_name == name]
+        if not records:
+            raise UserError(f"There is no forecast named {name} for {dataset}.")
+        if self._in_production(dataset, name):
+            raise UserError(f"{name} is in production. Take it out of production first.")
+        tables = sorted({forecast_table(dataset, name, record.kind) for record in records})
+        with self._lock:
+            self.store.delete_forecast(dataset, name, tables)
+            gone = {record.forecast_id for record in records}
+            self._forecasts = [r for r in self._forecasts if r.forecast_id not in gone]
+            for forecast_id in gone:
+                self._sizes.pop(forecast_id, None)
+                self._bands.pop(forecast_id, None)
+            self._values.clear()
+            self._series_tables.clear()
+            self._score_cache.clear()
+            self._schedules.pop((dataset, name), None)
+            for table in tables:
+                self._table_sizes.pop(table, None)
+        logger.info("Deleted the forecast %s of %s: %s", name, dataset, ", ".join(tables))
+        return self.cleanup()
 
     # Forecasts: lists
 
@@ -1125,6 +1211,7 @@ class Workspace:
         with self._lock:
             self.store.save_forecast(issued, dataset)
             self._forecasts.append(issued.record)
+            self._table_sizes.clear()
             self._sizes[issued.record.forecast_id] = len(issued.rows)
         made_by = issued.record.dimension_columns
         values = issued.values.copy()
@@ -1195,7 +1282,7 @@ class Workspace:
             raise UserError("Give the forecast a name.")
         if any(r.dataset == dataset and r.forecast_name == name for r in self._forecasts):
             raise UserError(
-                f"A forecast named {name} exists for this dataset. Open it to reissue it, "
+                f"A forecast named {name} exists for this dataset. Open it to run it again, "
                 "or choose another name."
             )
         try:
@@ -1285,8 +1372,8 @@ class Workspace:
         ends = panel.dates[-1].date()
         if any(issue.history_end_date == ends for issue in issues):
             raise NoNewDataError(
-                f"This forecast was already issued with history to {ends}. "
-                "There is no newer data to reissue it with."
+                f"This forecast was already run with history to {ends}. "
+                "There is no newer data to run it with."
             )
         with self._using(self._model_of(latest)):
             issued = self._with_progress(

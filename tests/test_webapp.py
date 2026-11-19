@@ -246,7 +246,7 @@ def test_a_forecast_name_is_used_once(client):
         json={"forecast_name": "Monthly demand", "dimension_columns": ["sku"], "horizon": 6},
     )
     assert again.status_code == 400
-    assert "Open it to reissue it" in again.json()["detail"]
+    assert "Open it to run it again" in again.json()["detail"]
     unnamed = client.post(
         "/api/datasets/Sales/forecasts",
         json={"forecast_name": " ", "dimension_columns": ["sku"], "horizon": 6},
@@ -314,7 +314,7 @@ def test_reissues_overlap_and_are_compared_with_what_happened(client, store):
 
     repeated = finish(client, client.post(f"{address}/reissue", json={}))
     assert repeated["state"] == "failed"
-    assert "already issued" in repeated["error"]
+    assert "already run" in repeated["error"]
 
     compared = client.get(f"{address}/compare", params={"ts_id": "county=LINN|sku=GIN"}).json()
     assert [issue["history_end_date"] for issue in compared["issues"]] == ends
@@ -816,3 +816,44 @@ def test_every_forecast_has_its_own_table(client, store):
     )
     assert close.status_code == 400
     assert "too close" in close.json()["detail"]
+
+
+def test_forecasts_not_in_production_can_be_cleaned_up(store, tmp_path):
+    workspace = Workspace(lambda: store, StandInForecaster(), None, None, FakeScheduler())
+    workspace.connect()
+    client = TestClient(create_app(workspace, front_end=tmp_path))
+    add_dataset(client)
+    new_forecast(client)  # 36 rows and two test runs of 36
+    new_forecast(client, forecast_name="By SKU", dimension_columns=["sku"], cutoffs=0)
+    new_forecast(client, forecast_name="Kept", dimension_columns=["sku"], cutoffs=0)
+    client.post("/api/datasets/Sales/forecasts/Kept/production", json={"cron": "0 6 1 * *"})
+
+    listed = client.get("/api/cleanup").json()
+    # The forecast in production is not offered.
+    assert [row["forecast_name"] for row in listed["forecasts"]] == ["Monthly demand", "By SKU"]
+    assert (listed["tables"], listed["in_production"]) == (3, 1)
+    first = listed["forecasts"][0]
+    assert (first["runs"], first["test_runs"], first["rows"]) == (1, 2, 108)
+    assert first["tables"] == [
+        "fake.forecast_values_sales__monthly_demand",
+        "fake.forecast_values_sales__monthly_demand__test_runs",
+    ]
+
+    refused = client.delete("/api/datasets/Sales/forecasts/Kept")
+    assert refused.status_code == 400
+    assert "Take it out of production first" in refused.json()["detail"]
+
+    after = client.delete("/api/datasets/Sales/forecasts/Monthly demand").json()
+    assert [row["forecast_name"] for row in after["forecasts"]] == ["By SKU"]
+    assert store.dropped == [
+        "forecast_values_sales__monthly_demand",
+        "forecast_values_sales__monthly_demand__test_runs",
+    ]
+    assert {r.forecast_name for r in store.saved_forecasts} == {"By SKU", "Kept"}
+    names = [
+        g["forecast_name"] for g in client.get("/api/datasets/Sales").json()["forecast_groups"]
+    ]
+    assert sorted(names) == ["By SKU", "Kept"]
+    assert client.get("/api/datasets/Sales/forecasts/Monthly demand").status_code == 400
+    # The name is free again.
+    new_forecast(client, cutoffs=0)
