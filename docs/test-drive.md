@@ -134,8 +134,8 @@ once. The steps below change some of them.
 6. **Check accuracy on the past**: leave it on, from 4 past dates, 3 months
    apart. The screen lists the dates: July 2025, October 2025, January 2026
    and April 2026.
-7. On the right, **Model** lists the models deployed in the workbench; today
-   there is one. A name is offered; change it if you like. Click **Create
+7. On the right, **Forecasting model** lists the models deployed in the
+   workbench: Timestral-209M, and the smaller ones if they were deployed. A name is offered; change it if you like. Click **Create
    forecast**. It
    takes about half a minute and then opens.
 8. Reissue it with history to August 2026, then September 2026. Open

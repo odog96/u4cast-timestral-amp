@@ -23,7 +23,9 @@ The code of this project is licensed under Apache 2.0; see `LICENSE`.
 
 ## What it does
 
-1. **Add a dataset.** Point at an Iceberg table, or upload a CSV file. Pick
+1. **Add a dataset.** Browse to a table through one of the project's data
+   connections (the data lake, or a Hive or Impala virtual warehouse), or
+   upload a CSV file. Pick
    the date, the value to forecast and the columns that tell series apart.
    The frequency is detected and you confirm it.
 2. **Select a slice.** Filter on any column, choose which columns make one
@@ -114,6 +116,11 @@ The model is called through one small interface. Two implementations exist:
 the workbench model endpoint, which the application uses, and Timestral
 loaded in the same process, chosen with `U4CAST_SERVING=in_process`.
 
+The new forecast screen offers every workbench model of the project that
+serves forecasts for this application. The install deploys one. To add the
+smaller Timestral models, run `python3 serving/more_models_job.py` in a
+session: it creates and runs a job that deploys them.
+
 ## Develop
 
 ```
@@ -142,6 +149,7 @@ All are environment variables, set on the project.
 | `U4CAST_SERVING` | the endpoint, when its key is set | `workbench` or `in_process` |
 | `U4CAST_MODEL_ACCESS_KEY` | set by the model deploy step | Which workbench model to call |
 | `U4CAST_BATCH_SIZE` | `500` | The most series in one model call |
+| `U4CAST_MORE_MODELS` | the 28M and 123M models | Which further Timestral models `serving/more_models_job.py` deploys |
 | `U4CAST_SPARK_MODE` | `local` | `local` runs Spark in the application's container; `cluster` uses workers |
 | `U4CAST_SPARK_CONNECTION` | the project's first | The Spark data connection |
 | `U4CAST_SPARK_DRIVER_MEMORY` | `2g` | Memory for Spark in the container |
