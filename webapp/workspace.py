@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from u4cast.backtest import Scores, score_forecasts
+from u4cast.connections import Catalog
 from u4cast.endpoint import BLOCK_STEPS
 from u4cast.forecast import IssuedForecast, issue_forecast, reissue_forecast
 from u4cast.frequency import SEASON_LENGTH, Frequency, detect_frequency, minimum_history
@@ -51,6 +52,8 @@ DATES_FRESH_SECONDS = 60
 MODELS_FRESH_SECONDS = 60
 MAX_DRILL_VALUES = 2_000
 WARM = 8
+BROWSE_FRESH_SECONDS = 300
+OWN_TABLES = ("forecasts", "datasets")
 """How many forecasts are read ahead of time when the application starts."""
 """How long the dates of a history table are trusted before it is asked again for new rows."""
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
@@ -170,8 +173,12 @@ class Workspace:
         connect: Callable[[], Any],
         forecaster: Forecaster,
         choices: Callable[[], list[ModelChoice]] | None = None,
+        catalog: Callable[[Any], Catalog] | None = None,
     ) -> None:
         self._connect = connect
+        self._make_catalog = catalog
+        self._catalog: Catalog | None = None
+        self._browsed = _Recent(64)
         self._default = forecaster
         self._active: Forecaster | None = None
         self._list_choices = choices
@@ -449,6 +456,61 @@ class Workspace:
                 found = self.store.dimension_values(record.source_table, column)
             self._dimension_values[key] = [plain(value) for value in found]
         return self._dimension_values[key]
+
+    # Browsing to a table: data connection, database, table.
+
+    @property
+    def catalog(self) -> Catalog:
+        if self._make_catalog is None:
+            raise UserError(
+                "Browsing data connections is not available here. Type the table's name."
+            )
+        if self._catalog is None:
+            self._catalog = self._make_catalog(self.store)
+        return self._catalog
+
+    def _browse(self, key: str, ask: Callable[[], Any]) -> Any:
+        """Ask the catalog, and keep the answer for a few minutes."""
+        kept = self._browsed.get(key)
+        if kept is not None and time.monotonic() - kept[0] < BROWSE_FRESH_SECONDS:
+            return kept[1]
+        try:
+            with self._lock:
+                answer = ask()
+        except (UserError, NotReadyError):
+            raise
+        except ValueError as error:
+            raise UserError(str(error)) from error
+        except Exception as error:
+            raise UserError(f"The data connection could not be read: {error}") from error
+        self._browsed.put(key, (time.monotonic(), answer))
+        return answer
+
+    def connections(self) -> dict[str, Any]:
+        """Return the project's data connections, the data lake first, and where to start."""
+        if self._make_catalog is None:
+            return {"connections": [], "database": getattr(self._store, "database", None)}
+        found = self._browse("connections", self.catalog.connections)
+        return {
+            "connections": [{"name": c.name, "type": c.type, "kind": c.kind} for c in found],
+            "database": self.store.database,
+        }
+
+    def databases(self, connection: str) -> list[str]:
+        return self._browse(f"databases|{connection}", lambda: self.catalog.databases(connection))
+
+    def tables_of(self, connection: str, database: str) -> list[dict[str, Any]]:
+        """Return the tables of a database, and which datasets already read each one."""
+        names = self._browse(
+            f"tables|{connection}|{database}", lambda: self.catalog.tables(connection, database)
+        )
+        used = {record.source_table: record.dataset for record in self._datasets.values()}
+        mine = database == self.store.database
+        return [
+            {"table": f"{database}.{name}", "name": name, "dataset": used.get(f"{database}.{name}")}
+            for name in names
+            if not (mine and (name in OWN_TABLES or name.startswith("forecast_values_")))
+        ]
 
     def source_tables(self) -> list[dict[str, Any]]:
         """Return the history tables of the application's database, and whether each is in use."""

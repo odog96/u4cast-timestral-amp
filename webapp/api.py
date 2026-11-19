@@ -143,6 +143,20 @@ def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
             body.spec(name), body.horizon, body.cutoffs, body.cutoff_step
         )
 
+    # Browsing to a table
+
+    @app.get("/api/connections")
+    def connections() -> dict[str, Any]:
+        return workspace.connections()
+
+    @app.get("/api/connections/{connection}/databases")
+    def databases(connection: str) -> list[str]:
+        return workspace.databases(connection)
+
+    @app.get("/api/connections/{connection}/databases/{database}/tables")
+    def tables_of(connection: str, database: str) -> list[dict[str, Any]]:
+        return workspace.tables_of(connection, database)
+
     # Sources
 
     @app.get("/api/sources")

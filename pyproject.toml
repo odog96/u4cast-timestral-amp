@@ -21,6 +21,8 @@ app = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "python-multipart>=0.0.9",
+    # Lists databases and tables through a Hive or Impala virtual warehouse.
+    "impyla>=0.19",
 ]
 
 [dependency-groups]

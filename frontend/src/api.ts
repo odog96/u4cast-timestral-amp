@@ -269,6 +269,15 @@ const query = (values: Record<string, string | number | null | undefined>) => {
 export const api = {
   status: () => get<Status>("/api/status"),
   models: () => get<ModelChoice[]>("/api/models"),
+  connections: () =>
+    get<{ connections: { name: string; type: string; kind: string }[]; database: string | null }>(
+      "/api/connections",
+    ),
+  databases: (connection: string) => get<string[]>(`/api/connections/${e(connection)}/databases`),
+  tablesOf: (connection: string, database: string) =>
+    get<{ table: string; name: string; dataset: string | null }[]>(
+      `/api/connections/${e(connection)}/databases/${e(database)}/tables`,
+    ),
   datasets: () => get<Dataset[]>("/api/datasets"),
   dataset: (name: string) => get<DatasetOverview>(`/api/datasets/${e(name)}`),
   saveDataset: (body: Omit<Dataset, "forecasts" | "issues">) => post<Dataset>("/api/datasets", body),

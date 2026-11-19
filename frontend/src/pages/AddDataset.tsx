@@ -30,7 +30,6 @@ export function AddDataset() {
 }
 
 function ChooseSource({ table, onChoose }: { table: string | null; onChoose: (t: string) => void }) {
-  const sources = useQuery({ queryKey: ["sources"], queryFn: api.sources });
   const [other, setOther] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const client = useQueryClient();
@@ -48,23 +47,11 @@ function ChooseSource({ table, onChoose }: { table: string | null; onChoose: (t:
         <h2>
           <span className="step-no">1</span>Where is the history?
         </h2>
-        <p className="sub">Choose an Iceberg table, name another one, or upload a CSV file.</p>
-        {sources.isLoading && <Loading what="Looking for tables" />}
-        {sources.error && <ErrorNote error={sources.error} />}
-        <div className="chips" style={{ marginBottom: 14 }}>
-          {(sources.data ?? []).map((source) => (
-            <button
-              key={source.table}
-              className={`chip ${table === source.table ? "on" : ""}`}
-              onClick={() => onChoose(source.table)}
-              title={source.dataset ? `Already used by the dataset ${source.dataset}` : undefined}
-            >
-              <Icon name="table" size={13} />
-              <span className="mono">{source.table}</span>
-            </button>
-          ))}
-        </div>
-        <div className="row wrap" style={{ gap: 16, alignItems: "flex-end" }}>
+        <p className="sub">
+          Browse to a table through one of the project's data connections, or upload a CSV file.
+        </p>
+        <Browse table={table} onChoose={onChoose} />
+        <div className="row wrap" style={{ gap: 16, alignItems: "flex-end", marginTop: 18 }}>
           <form
             className="field"
             style={{ flex: "1 1 300px" }}
@@ -73,7 +60,7 @@ function ChooseSource({ table, onChoose }: { table: string | null; onChoose: (t:
               if (other.trim()) onChoose(other.trim());
             }}
           >
-            <label htmlFor="other-table">Another table</label>
+            <label htmlFor="other-table">Or type a table's name</label>
             <div className="row">
               <input
                 id="other-table"
@@ -346,5 +333,100 @@ function PickColumns({ table }: { table: string }) {
         )}
       </div>
     </section>
+  );
+}
+
+/** Browse to a table: data connection, then database, then table. */
+function Browse({ table, onChoose }: { table: string | null; onChoose: (t: string) => void }) {
+  const start = useQuery({ queryKey: ["connections"], queryFn: api.connections });
+  const [connection, setConnection] = useState<string | null>(null);
+  const [database, setDatabase] = useState<string | null>(null);
+  const chosenConnection = connection ?? start.data?.connections[0]?.name ?? null;
+  const databases = useQuery({
+    queryKey: ["databases", chosenConnection],
+    queryFn: () => api.databases(chosenConnection as string),
+    enabled: Boolean(chosenConnection),
+  });
+  const home = start.data?.database ?? null;
+  const chosenDatabase =
+    database ?? (home && databases.data?.includes(home) ? home : databases.data?.[0]) ?? null;
+  const tables = useQuery({
+    queryKey: ["tables", chosenConnection, chosenDatabase],
+    queryFn: () => api.tablesOf(chosenConnection as string, chosenDatabase as string),
+    enabled: Boolean(chosenConnection && chosenDatabase),
+  });
+
+  if (start.isLoading) return <Loading what="Looking for data connections" />;
+  if (start.error) return <ErrorNote error={start.error} />;
+  if (!start.data || start.data.connections.length === 0) return null;
+  const kind = start.data.connections.find((c) => c.name === chosenConnection)?.kind;
+
+  return (
+    <div className="browse">
+      <div className="field">
+        <label htmlFor="browse-connection">Data connection</label>
+        <select
+          id="browse-connection"
+          className="select"
+          value={chosenConnection ?? ""}
+          onChange={(event) => {
+            setConnection(event.target.value);
+            setDatabase(null);
+          }}
+        >
+          {start.data.connections.map((c) => (
+            <option key={c.name} value={c.name}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        {kind && <span className="hint">{kind}</span>}
+      </div>
+      <div className="field">
+        <label htmlFor="browse-database">Database</label>
+        <select
+          id="browse-database"
+          className="select"
+          value={chosenDatabase ?? ""}
+          onChange={(event) => setDatabase(event.target.value)}
+          disabled={!databases.data}
+        >
+          {(databases.data ?? []).map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <span className="hint">
+          {databases.isLoading
+            ? "Asking the connection"
+            : databases.data
+              ? `${databases.data.length} databases`
+              : ""}
+        </span>
+      </div>
+      <div className="field wide">
+        <label>Table</label>
+        {databases.error && <ErrorNote error={databases.error} />}
+        {tables.error && <ErrorNote error={tables.error} />}
+        {tables.isLoading && <Loading what="Looking for tables" />}
+        {tables.data && tables.data.length === 0 && (
+          <span className="hint">This database has no table to forecast from.</span>
+        )}
+        <div className="chips">
+          {(tables.data ?? []).map((source) => (
+            <button
+              key={source.table}
+              className={`chip ${table === source.table ? "on" : ""}`}
+              onClick={() => onChoose(source.table)}
+              title={source.dataset ? `Already used by the dataset ${source.dataset}` : undefined}
+            >
+              <Icon name="table" size={13} />
+              <span className="mono">{source.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

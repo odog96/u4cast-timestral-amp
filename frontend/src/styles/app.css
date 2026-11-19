@@ -1159,3 +1159,17 @@ details.about[open] > summary {
   text-align: left;
   box-shadow: var(--shadow-2);
 }
+
+/* Browse to a table: connection, database, then its tables. */
+.browse {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(200px, 1fr);
+  gap: 16px;
+}
+.browse .wide {
+  grid-column: 1 / -1;
+}
+.browse .chips {
+  max-height: 180px;
+  overflow: auto;
+}

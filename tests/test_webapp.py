@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fake_store import FakeStore
+from u4cast.connections import Connection, checked
 from u4cast.layout import Kind
 from u4cast.model import StandInForecaster
 from u4cast.serving import ModelChoice, served_name, workbench_choices
@@ -588,3 +589,56 @@ def test_a_forecast_is_drilled_into_by_its_dimensions(client):
     assert nothing.status_code == 400
     wrong = client.get(f"{address}/chart", params={"drill": '{"store": "1"}'})
     assert wrong.status_code == 400
+
+
+class FakeCatalog:
+    """Two connections that look at the same two databases."""
+
+    def __init__(self) -> None:
+        self.asked = 0
+
+    def connections(self):
+        return [Connection("lake", "SPARK"), Connection("warehouse", "IMPALA")]
+
+    def databases(self, connection):
+        self.asked += 1
+        if connection not in ("lake", "warehouse"):
+            raise ValueError(f"This project has no data connection named {connection}.")
+        return ["fake", "retail"]
+
+    def tables(self, connection, database):
+        checked(database)
+        return {"fake": ["datasets", "forecast_values_sales", "forecasts", "sales"]}.get(
+            database, ["orders"]
+        )
+
+
+def test_a_table_is_browsed_to_through_a_data_connection(store, tmp_path):
+    catalog = FakeCatalog()
+    workspace = Workspace(lambda: store, StandInForecaster(), None, lambda _: catalog)
+    workspace.connect()
+    client = TestClient(create_app(workspace, front_end=tmp_path))
+    add_dataset(client)
+
+    start = client.get("/api/connections").json()
+    assert start["database"] == "fake"
+    assert start["connections"] == [
+        {"name": "lake", "type": "SPARK", "kind": "Data lake, with Spark"},
+        {"name": "warehouse", "type": "IMPALA", "kind": "Impala virtual warehouse"},
+    ]
+    assert client.get("/api/connections/warehouse/databases").json() == ["fake", "retail"]
+    assert client.get("/api/connections/warehouse/databases").json() == ["fake", "retail"]
+    assert catalog.asked == 1  # the second answer was kept
+
+    # The application's own tables are left out, and a table in use says by which dataset.
+    mine = client.get("/api/connections/lake/databases/fake/tables").json()
+    assert mine == [{"table": "fake.sales", "name": "sales", "dataset": "Sales"}]
+    other = client.get("/api/connections/lake/databases/retail/tables").json()
+    assert other == [{"table": "retail.orders", "name": "orders", "dataset": None}]
+
+    assert client.get("/api/connections/nowhere/databases").status_code == 400
+    assert client.get("/api/connections/lake/databases/a;drop/tables").status_code == 400
+
+
+def test_without_a_catalog_there_is_nothing_to_browse(client):
+    assert client.get("/api/connections").json() == {"connections": [], "database": "fake"}
