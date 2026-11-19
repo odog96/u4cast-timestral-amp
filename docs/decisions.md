@@ -1566,3 +1566,10 @@ Claude Code adds dated lines here.
   now gives a build 12 minutes and then starts another, up to three.
 - 19 November 2026. A script run as a Cloudera AI job has no `__file__`.
   The job scripts find the project folder from the working directory.
+- 19 November 2026. Deployed the workbench model `timestral-28m` with the job
+  "u4cast: deploy more models" (270 seconds). The application lists both
+  models. A forecast of 300 weekly SKUs with 8 past dates ran through the
+  28M model in 50 seconds and is stored as "SKUs, 4 weeks ahead, small
+  model": 17.9% against 37.2% for the reference. The 209M example beside it
+  shows 19.4%, from past dates four weeks earlier, so the two figures are
+  not a like-for-like comparison of the models.
