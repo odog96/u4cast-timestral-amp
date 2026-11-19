@@ -630,13 +630,10 @@ the application on 18 November 2026.
 9. **What should the demo say about accuracy?** Answered by the test of 18
    November 2026, in "Accuracy by level of detail". In short: show a short
    horizon, and show weekly data. Oliver decides which examples to show.
-10. **Has the AMP been installed from scratch?** No. `.project-metadata.yaml`
-    parses and lists six steps. Run in this project on 18 November 2026:
-    steps 1 to 4, where step 4 ran the ingest as a Cloudera AI job with the
-    add-ons looked up, in 230 seconds. The scripts that steps 5 and 6 call
-    were run earlier, on 17 and 18 November. The AMP as a whole has not been
-    installed into a new project. That needs the repo on GitHub first, and
-    is the next thing to do.
+10. **Has the AMP been installed from scratch?** Answered on 19 November
+    2026: yes. A new project, "u4cast-amp-test", was made from the GitHub
+    repo as an AMP through Cloudera AI's API, and all six steps ran without
+    help in 17 minutes. See "Changes made during implementation".
 11. **Why do Claude Code's sessions keep ending?** Seven ended during this
     work, several while a second Spark was running next to other work. No
     log shows the cause. It may be memory.
@@ -1784,3 +1781,20 @@ Claude Code adds dated lines here.
   forecast of 62 series with an accuracy check 19 seconds; a run again 4 to
   12 seconds; first open of a Production tab 4 seconds; deleting a forecast
   9 to 12 seconds.
+- 19 November 2026. The AMP was installed from scratch, which answers open
+  question 10. The project "u4cast-amp-test" was created from GitHub at
+  commit `023f094` with its own database, `u4cast_amptest`. Times from the
+  start: dependencies, front end and weights done by minute 7; the ingest
+  job ran from minute 7.5 to 12.5; the model was built and deployed by
+  minute 16 (the build did not hang); the application was running at minute
+  17, at its own address, because `u4cast` was taken by the first project.
+  Checked on the installed copy: both demo datasets with a date with no row
+  set to zero; 7 data connections; a forecast of 39 series in dollars with
+  two test runs in 14 seconds through its own model; a run again in 5
+  seconds; the chart, accuracy, Production tab and clean-up all answer; the
+  dashboard renders. What an AMP install needs that the file does not say:
+  the API asks for a runtime identifier when it launches an AMP.
+- 19 November 2026. Left in the workspace by that test: the project
+  "u4cast-amp-test - ozarate 1" with its model, application and job, and the
+  database `u4cast_amptest`. Whether to keep or remove them is Oliver's
+  call.

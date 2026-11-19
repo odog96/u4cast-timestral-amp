@@ -122,7 +122,7 @@ function CleanupNote() {
   return (
     <p className="sub" style={{ marginTop: 16, fontSize: 13 }}>
       You have {data.tables} forecast table{data.tables === 1 ? "" : "s"} that are not in
-      production, {size(data.bytes)} in all, the oldest last run {age(data.oldest)} ago.{" "}
+      production, {size(data.bytes)} in all, the oldest last run {age(data.oldest) === "today" ? "today" : `${age(data.oldest)} ago`}.{" "}
       <Link to="/cleanup">Clean up</Link>
     </p>
   );
