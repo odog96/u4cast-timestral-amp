@@ -163,6 +163,49 @@ The upload becomes a new Iceberg table, `u4cast.upload_sample_sales`.
 Uploading the same file again makes `upload_sample_sales_2`: an upload never
 replaces a table.
 
+## 8b. A CSV with gaps (5 minutes)
+
+`docs/sample-sales-gaps.csv` is the same made-up data with faults put in on
+purpose: 171 rows where the complete file has 216.
+
+| Series | What is wrong with it |
+| --- | --- |
+| North, Filter coffee | No row for March, April and November 2024 |
+| North, Espresso beans | A row with the number left empty in July 2023 and February 2025 |
+| South, Espresso beans | Stops in June 2025: no rows for the last six months |
+| South, Decaf | Starts in January 2024: 24 months, the least a monthly series may have |
+| North, Decaf | Starts in January 2025: 12 months, too short |
+| South, Filter coffee | Complete |
+
+Upload it and add it as a dataset. The answer to "When a date has no row for
+a series" is what this file tests. Whatever you choose, expect:
+
+- 5 series kept and 1 left out. The new forecast screen says "Left out: 1
+  series with too little history", and lists North, Decaf.
+- South, Decaf is not given anything before January 2024. A series is never
+  filled before its first row.
+- A row with an empty number is treated like a date with no row.
+
+What the choice changes, for North, Filter coffee in March and April 2024
+(February was 220 and May was 336):
+
+| Choice | March 2024 | April 2024 |
+| --- | --- | --- |
+| Unknown | left empty | left empty |
+| Zero | 0 | 0 |
+| The series' average | 270 | 270 |
+| A straight line between neighbors | 259 | 297 |
+| The last value repeated | 220 | 220 |
+
+And for South, Espresso beans after it stops in June 2025 (its last value
+was 490): Unknown leaves the six months empty, Zero makes them 0, the
+average makes them 332, and the other two repeat 490. With Zero the forecast
+falls toward nothing, which is right if the product was withdrawn and wrong
+if the data is only late.
+
+The choice is made once, when the dataset is added. To compare two choices,
+upload the file twice and add it under two names.
+
 ## 9. Things it should refuse (2 minutes)
 
 - Create a forecast with a name that is already used in the dataset. It

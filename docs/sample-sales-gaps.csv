@@ -1,0 +1,172 @@
+month,region,product,units
+2023-01-01,North,Espresso beans,314
+2023-02-01,North,Espresso beans,382
+2023-03-01,North,Espresso beans,438
+2023-04-01,North,Espresso beans,449
+2023-05-01,North,Espresso beans,497
+2023-06-01,North,Espresso beans,509
+2023-07-01,North,Espresso beans,
+2023-08-01,North,Espresso beans,481
+2023-09-01,North,Espresso beans,453
+2023-10-01,North,Espresso beans,340
+2023-11-01,North,Espresso beans,379
+2023-12-01,North,Espresso beans,333
+2024-01-01,North,Espresso beans,368
+2024-02-01,North,Espresso beans,395
+2024-03-01,North,Espresso beans,449
+2024-04-01,North,Espresso beans,537
+2024-05-01,North,Espresso beans,599
+2024-06-01,North,Espresso beans,585
+2024-07-01,North,Espresso beans,577
+2024-08-01,North,Espresso beans,566
+2024-09-01,North,Espresso beans,463
+2024-10-01,North,Espresso beans,392
+2024-11-01,North,Espresso beans,399
+2024-12-01,North,Espresso beans,362
+2025-01-01,North,Espresso beans,352
+2025-02-01,North,Espresso beans,
+2025-03-01,North,Espresso beans,504
+2025-04-01,North,Espresso beans,547
+2025-05-01,North,Espresso beans,585
+2025-06-01,North,Espresso beans,669
+2025-07-01,North,Espresso beans,691
+2025-08-01,North,Espresso beans,604
+2025-09-01,North,Espresso beans,525
+2025-10-01,North,Espresso beans,497
+2025-11-01,North,Espresso beans,458
+2025-12-01,North,Espresso beans,417
+2023-01-01,North,Filter coffee,202
+2023-02-01,North,Filter coffee,233
+2023-03-01,North,Filter coffee,249
+2023-04-01,North,Filter coffee,271
+2023-05-01,North,Filter coffee,315
+2023-06-01,North,Filter coffee,324
+2023-07-01,North,Filter coffee,332
+2023-08-01,North,Filter coffee,267
+2023-09-01,North,Filter coffee,248
+2023-10-01,North,Filter coffee,215
+2023-11-01,North,Filter coffee,183
+2023-12-01,North,Filter coffee,197
+2024-01-01,North,Filter coffee,212
+2024-02-01,North,Filter coffee,220
+2024-05-01,North,Filter coffee,336
+2024-06-01,North,Filter coffee,343
+2024-07-01,North,Filter coffee,346
+2024-08-01,North,Filter coffee,279
+2024-09-01,North,Filter coffee,281
+2024-10-01,North,Filter coffee,246
+2024-12-01,North,Filter coffee,210
+2025-01-01,North,Filter coffee,212
+2025-02-01,North,Filter coffee,253
+2025-03-01,North,Filter coffee,270
+2025-04-01,North,Filter coffee,313
+2025-05-01,North,Filter coffee,347
+2025-06-01,North,Filter coffee,332
+2025-07-01,North,Filter coffee,355
+2025-08-01,North,Filter coffee,316
+2025-09-01,North,Filter coffee,292
+2025-10-01,North,Filter coffee,242
+2025-11-01,North,Filter coffee,239
+2025-12-01,North,Filter coffee,223
+2025-01-01,North,Decaf,63
+2025-02-01,North,Decaf,74
+2025-03-01,North,Decaf,83
+2025-04-01,North,Decaf,92
+2025-05-01,North,Decaf,96
+2025-06-01,North,Decaf,106
+2025-07-01,North,Decaf,102
+2025-08-01,North,Decaf,92
+2025-09-01,North,Decaf,81
+2025-10-01,North,Decaf,66
+2025-11-01,North,Decaf,62
+2025-12-01,North,Decaf,65
+2023-01-01,South,Espresso beans,217
+2023-02-01,South,Espresso beans,226
+2023-03-01,South,Espresso beans,308
+2023-04-01,South,Espresso beans,335
+2023-05-01,South,Espresso beans,399
+2023-06-01,South,Espresso beans,369
+2023-07-01,South,Espresso beans,352
+2023-08-01,South,Espresso beans,308
+2023-09-01,South,Espresso beans,327
+2023-10-01,South,Espresso beans,309
+2023-11-01,South,Espresso beans,230
+2023-12-01,South,Espresso beans,225
+2024-01-01,South,Espresso beans,256
+2024-02-01,South,Espresso beans,265
+2024-03-01,South,Espresso beans,317
+2024-04-01,South,Espresso beans,358
+2024-05-01,South,Espresso beans,404
+2024-06-01,South,Espresso beans,442
+2024-07-01,South,Espresso beans,408
+2024-08-01,South,Espresso beans,402
+2024-09-01,South,Espresso beans,333
+2024-10-01,South,Espresso beans,308
+2024-11-01,South,Espresso beans,238
+2024-12-01,South,Espresso beans,241
+2025-01-01,South,Espresso beans,292
+2025-02-01,South,Espresso beans,303
+2025-03-01,South,Espresso beans,375
+2025-04-01,South,Espresso beans,425
+2025-05-01,South,Espresso beans,486
+2025-06-01,South,Espresso beans,490
+2023-01-01,South,Filter coffee,133
+2023-02-01,South,Filter coffee,153
+2023-03-01,South,Filter coffee,179
+2023-04-01,South,Filter coffee,195
+2023-05-01,South,Filter coffee,191
+2023-06-01,South,Filter coffee,222
+2023-07-01,South,Filter coffee,221
+2023-08-01,South,Filter coffee,216
+2023-09-01,South,Filter coffee,187
+2023-10-01,South,Filter coffee,153
+2023-11-01,South,Filter coffee,136
+2023-12-01,South,Filter coffee,154
+2024-01-01,South,Filter coffee,150
+2024-02-01,South,Filter coffee,179
+2024-03-01,South,Filter coffee,209
+2024-04-01,South,Filter coffee,199
+2024-05-01,South,Filter coffee,232
+2024-06-01,South,Filter coffee,241
+2024-07-01,South,Filter coffee,236
+2024-08-01,South,Filter coffee,219
+2024-09-01,South,Filter coffee,192
+2024-10-01,South,Filter coffee,168
+2024-11-01,South,Filter coffee,136
+2024-12-01,South,Filter coffee,142
+2025-01-01,South,Filter coffee,144
+2025-02-01,South,Filter coffee,170
+2025-03-01,South,Filter coffee,189
+2025-04-01,South,Filter coffee,227
+2025-05-01,South,Filter coffee,250
+2025-06-01,South,Filter coffee,250
+2025-07-01,South,Filter coffee,245
+2025-08-01,South,Filter coffee,224
+2025-09-01,South,Filter coffee,194
+2025-10-01,South,Filter coffee,173
+2025-11-01,South,Filter coffee,152
+2025-12-01,South,Filter coffee,154
+2024-01-01,South,Decaf,51
+2024-02-01,South,Decaf,53
+2024-03-01,South,Decaf,56
+2024-04-01,South,Decaf,68
+2024-05-01,South,Decaf,66
+2024-06-01,South,Decaf,83
+2024-07-01,South,Decaf,66
+2024-08-01,South,Decaf,69
+2024-09-01,South,Decaf,61
+2024-10-01,South,Decaf,47
+2024-11-01,South,Decaf,47
+2024-12-01,South,Decaf,47
+2025-01-01,South,Decaf,47
+2025-02-01,South,Decaf,52
+2025-03-01,South,Decaf,62
+2025-04-01,South,Decaf,66
+2025-05-01,South,Decaf,72
+2025-06-01,South,Decaf,72
+2025-07-01,South,Decaf,73
+2025-08-01,South,Decaf,61
+2025-09-01,South,Decaf,60
+2025-10-01,South,Decaf,48
+2025-11-01,South,Decaf,42
+2025-12-01,South,Decaf,43

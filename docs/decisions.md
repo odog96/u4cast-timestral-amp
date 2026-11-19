@@ -1804,3 +1804,11 @@ Claude Code adds dated lines here.
   `forecast_values_weekly_sales_arriving`, after checking once more that
   all 86 runs in them are in the new tables. The application reads its
   forecasts as before.
+
+- 19 November 2026. Added `docs/sample-sales-gaps.csv`, the made-up sample
+  with gaps put in on purpose, and a part of `docs/test-drive.md` that says
+  what each choice for a date with no row does with it. The figures there
+  come from running the application's own preparation on the file. Why:
+  Oliver wants to test the handling of missing data, which has existed
+  since decision 35 and which the clean demo data never exercises. Nothing
+  in the application changed.
