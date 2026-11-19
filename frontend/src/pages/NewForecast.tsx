@@ -6,7 +6,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, type DatasetOverview, type Frequency, type Job, type SliceRequest } from "../api";
 import { JobProgress } from "../components/JobProgress";
 import { MultiSelect } from "../components/pickers";
-import { ErrorNote, Icon, Loading, useCrumbs, useDebounced } from "../components/ui";
+import { ErrorNote, Hint, Icon, Loading, useCrumbs, useDebounced } from "../components/ui";
 import { capital, duration, modelName, period, periods, unit } from "../format";
 
 const HORIZONS: Record<Frequency, number[]> = {
@@ -154,11 +154,14 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
 
           <div className="form-section">
             <h2>
-              <span className="step-no">2</span>One series per
+              <span className="step-no">2</span>Dimension list
+              <Hint
+                text="The dimension list sets the level you forecast at. Each combination of the columns in it gets its own forecast. Take a column out and its values are added together: with county and item you forecast every item in every county; with item only, every item across all counties."
+              />
             </h2>
             <p className="sub">
-              Each combination of these columns is one series. Leave a column out to add its values
-              together.
+              The level to forecast at. Each combination of these columns gets its own forecast;
+              take a column out to add its values together.
             </p>
             <div className="chips">
               {dataset.dimension_columns.map((column) => (

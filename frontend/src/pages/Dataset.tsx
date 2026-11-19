@@ -1,11 +1,11 @@
 // One dataset, two screens: Explore shows its history, Forecasts lists what was forecast from it.
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type DatasetOverview } from "../api";
 import { ChartFigure } from "../components/LineChart";
-import { CopyButton, ErrorNote, Icon, Loading, RowsTable, useCrumbs } from "../components/ui";
+import { CopyButton, ErrorNote, Icon, Loading, RowsTable, Tile, useCrumbs } from "../components/ui";
 import { day, FILLS, FREQUENCY_NAMES, period, periods } from "../format";
 
 export function DatasetPage() {
@@ -34,7 +34,7 @@ export function DatasetPage() {
     [dataset.date_column]: "Date",
     [dataset.target_column]: "Number to forecast",
   };
-  for (const column of dataset.dimension_columns) roles[column] = "Tells series apart";
+  for (const column of dataset.dimension_columns) roles[column] = "Dimension";
   const sql = `select *\nfrom ${dataset.source_table}\norder by ${dataset.date_column} desc\nlimit 100;`;
 
   return (
@@ -46,7 +46,7 @@ export function DatasetPage() {
             {FREQUENCY_NAMES[dataset.frequency]} history, {periods(dates.length, dataset.frequency)}
             {dates.length > 0 &&
               `, ${period(dates[0], dataset.frequency)} to ${period(dates[dates.length - 1], dataset.frequency)}`}
-            . One series per {dataset.dimension_columns.join(", ") || "date"}.
+            . Dimension list: {dataset.dimension_columns.join(", ") || "none"}.
           </p>
         </div>
         <Link to={`${here}/forecasts`} className="btn primary large">
@@ -59,21 +59,35 @@ export function DatasetPage() {
         <History dataset={dataset} />
 
 
-        <details className="card about">
-          <summary>
-            <span>
-              About this table
-              <span className="sub" style={{ marginLeft: 10 }}>
-                Columns, first rows and where forecasts are stored
-              </span>
-            </span>
-            <Icon name="chevron" size={16} />
-          </summary>
-          <div className="card-pad spread" style={{ borderBottom: "1px solid var(--line)" }}>
-            <div className="sub">
-              Read from <span className="mono">{dataset.source_table}</span>,{" "}
-              {dataset.source.rows.toLocaleString()} rows. The application never writes to this table.
-              A series needs {periods(dataset.minimum_history, dataset.frequency)} of history.
+        <section className="card">
+          <div className="tiles">
+            <Tile label="Rows" value={dataset.source.rows.toLocaleString()} note="In the Iceberg table" />
+            <Tile
+              label="Columns"
+              value={dataset.source.columns.length}
+              note={`${dataset.dimension_columns.length} in the dimension list, ${dataset.number_columns.length} numbers`}
+            />
+            <Tile
+              label="History"
+              value={periods(dates.length, dataset.frequency)}
+              note={
+                dates.length
+                  ? `${period(dates[0], dataset.frequency)} to ${period(dates[dates.length - 1], dataset.frequency)}`
+                  : "No dates"
+              }
+            />
+            <Tile label="Forecasts" value={dataset.forecast_groups.length} note={`${dataset.issues} issues stored`} />
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-head">
+            <div>
+              <h2>Schema</h2>
+              <div className="sub">
+                Read from <span className="mono">{dataset.source_table}</span>. The application never
+                writes to this table.
+              </div>
             </div>
             <CopyButton text={sql} label="Copy SQL" />
           </div>
@@ -98,11 +112,20 @@ export function DatasetPage() {
               <dd className="mono">{dataset.values_table}</dd>
             </dl>
           </div>
+        </section>
+
+        <section className="card">
+          <div className="card-head">
+            <div>
+              <h2>First 10 rows</h2>
+              <div className="sub">As they are in the table.</div>
+            </div>
+          </div>
           <RowsTable
             columns={dataset.source.columns.map((column) => column.name)}
-            rows={dataset.source.preview.slice(0, 8)}
+            rows={dataset.source.preview.slice(0, 10)}
           />
-        </details>
+        </section>
       </div>
     </main>
   );
@@ -158,6 +181,8 @@ const UNIT = { daily: "day", weekly: "week", monthly: "month", quarterly: "quart
 export function DatasetForecasts() {
   const { dataset: name = "" } = useParams();
   useCrumbs([{ label: name }, { label: "Forecasts" }]);
+  const navigate = useNavigate();
+  const client = useQueryClient();
   const overview = useQuery({ queryKey: ["dataset", name], queryFn: () => api.dataset(name) });
   if (overview.isLoading) {
     return (
@@ -228,7 +253,18 @@ export function DatasetForecasts() {
                 </thead>
                 <tbody>
                   {dataset.forecast_groups.map((group) => (
-                    <tr key={group.forecast_name} className="clickable">
+                    <tr
+                      key={group.forecast_name}
+                      className="clickable"
+                      onClick={() => navigate(`${here}/forecasts/${encodeURIComponent(group.forecast_name)}`)}
+                      onMouseEnter={() =>
+                        client.prefetchQuery({
+                          queryKey: ["chart", group.latest.forecast_id, null, {}],
+                          queryFn: () => api.chart(group.latest.forecast_id, null),
+                          staleTime: 60_000,
+                        })
+                      }
+                    >
                       <td>
                         <Link
                           to={`${here}/forecasts/${encodeURIComponent(group.forecast_name)}`}

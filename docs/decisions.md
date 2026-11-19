@@ -373,10 +373,13 @@ The following are the details of decision 38, chosen on 19 November 2026.
   gives one series. The range of a part is found the way the range of the
   total is: by forecasting the summed history once. A list offers only the
   values that go with what is chosen in the others.
-- **The palette.** A blue-white page, navy text and indigo for actions,
-  taken from the 2022 application. The chart colors are unchanged, because
-  they are the ones that passed the color-blindness check. Dark mode is
-  unchanged.
+- **The palette.** A blue-white page, navy text and indigo for actions and
+  for the forecast in charts, taken from the 2022 application. Oliver asked
+  for it on the charts too. The new chart colors have not been through the
+  color-blindness check the earlier ones passed. Dark mode is unchanged.
+- **The words "dimension list".** The columns a forecast is made by are
+  called the dimension list, as in the 2022 application, with a "?" that
+  explains it. Before, the screens said "one series per".
 - **Addresses.** `/datasets/<name>` is Explore, `/datasets/<name>/forecasts`
   the forecasts of a dataset.
 
@@ -1501,3 +1504,15 @@ Claude Code adds dated lines here.
   showed the 2022 front end and asked for its flow on what was built.
 - 19 November 2026. Open question for Oliver: the 2022 dashboard could
   delete a dataset and a forecast. This one cannot. See open question 13.
+- 19 November 2026. Oliver's feedback on decision 38, built the same day:
+  the screens say "dimension list" with a tooltip; Explore shows the number
+  of rows and columns, the schema and the first 10 rows in the open; the
+  charts use his palette.
+- 19 November 2026. Oliver found opening a forecast slow. Two causes. A row
+  in the list of forecasts looked clickable but only its name was a link;
+  the whole row now opens it. And the first chart of a forecast after a
+  restart took 8 seconds, against 0.05 after that, because the history is
+  read from the data lake once; the application now reads the newest issue
+  of every forecast ahead of time when it starts. He asked whether a larger
+  application would help: no, the time is one Spark read, not a shortage of
+  memory or processors. Open question 8 (pyarrow) is the lever.

@@ -409,7 +409,7 @@ function ForecastTab({
       {chart.error && <ErrorNote error={chart.error} />}
       {!built || !data ? (
         <section className="card">
-          <Loading what="Reading history from the data lake" />
+          <Loading what="Reading history from the data lake. The first look at a forecast takes a few seconds" />
         </section>
       ) : (
         <div style={{ opacity: chart.isPlaceholderData ? 0.6 : 1, transition: "opacity 0.15s" }}>

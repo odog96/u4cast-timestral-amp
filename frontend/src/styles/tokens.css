@@ -24,15 +24,15 @@
   --focus: rgba(65, 84, 241, 0.45);
 
   /* Charts */
-  --series-actual: #52514e;
-  --series-forecast: #2a78d6;
+  --series-actual: #012970;
+  --series-forecast: #4154f1;
   --series-reference: #eb6834;
-  --band: rgba(42, 120, 214, 0.13);
-  --ramp-1: #86b6ef;
-  --ramp-2: #5598e7;
-  --ramp-3: #2a78d6;
-  --ramp-4: #1c5cab;
-  --ramp-5: #0d366b;
+  --band: rgba(65, 84, 241, 0.14);
+  --ramp-1: #aab3fa;
+  --ramp-2: #7d8af6;
+  --ramp-3: #4154f1;
+  --ramp-4: #2a3bc4;
+  --ramp-5: #012970;
 
   /* Status: always shown with an icon or a word, never by color alone. */
   --good: #006300;

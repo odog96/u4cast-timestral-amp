@@ -73,7 +73,7 @@ export function Datasets() {
                 <tr>
                   <th>Dataset</th>
                   <th>Frequency</th>
-                  <th>One series per</th>
+                  <th>Dimension list</th>
                   <th className="r">Forecasts</th>
                   <th />
                 </tr>

@@ -50,6 +50,8 @@ MAX_SERIES = 25_000
 DATES_FRESH_SECONDS = 60
 MODELS_FRESH_SECONDS = 60
 MAX_DRILL_VALUES = 2_000
+WARM = 8
+"""How many forecasts are read ahead of time when the application starts."""
 """How long the dates of a history table are trusted before it is asked again for new rows."""
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 # Measured on the workbench model with 4 vCPU: see docs/decisions.md, check 6.
@@ -186,7 +188,7 @@ class Workspace:
         self._datasets: dict[str, DatasetRecord] = {}
         self._forecasts: list[ForecastRecord] = []
         self._sizes: dict[str, int] = {}
-        self._panels = _Recent(6)
+        self._panels = _Recent(8)
         self._values = _Recent(40)
         self._score_cache = _Recent(8)
         self._series_tables = _Recent(8)
@@ -201,7 +203,28 @@ class Workspace:
 
     def start(self) -> None:
         """Connect to the data lake in the background, so the server answers at once."""
-        threading.Thread(target=self.connect, name="u4cast-connect", daemon=True).start()
+
+        def work() -> None:
+            self.connect()
+            self.warm()
+
+        threading.Thread(target=work, name="u4cast-connect", daemon=True).start()
+
+    def warm(self) -> None:
+        """Read the newest issue of every forecast ahead of time, so its first chart is quick."""
+        if self.state != "ready":
+            return
+        newest: dict[tuple[str, str], ForecastRecord] = {}
+        for record in self._forecasts:
+            if record.kind is Kind.FORECAST:
+                key = (record.dataset, record.forecast_name)
+                if key not in newest or record.created_at > newest[key].created_at:
+                    newest[key] = record
+        for record in sorted(newest.values(), key=lambda r: r.created_at, reverse=True)[:WARM]:
+            try:
+                self.chart(record.forecast_id, None)
+            except Exception:
+                logger.info("Could not read %s ahead of time", record.forecast_name, exc_info=True)
 
     def connect(self) -> None:
         try:
@@ -345,7 +368,7 @@ class Workspace:
             with self._lock:
                 try:
                     columns = self.store.columns(table)
-                    preview = self.store.preview(table, 12)
+                    preview = self.store.preview(table, 12)  # the screens show the first 10
                     rows = self.store.row_count(table)
                 except NotReadyError:
                     raise

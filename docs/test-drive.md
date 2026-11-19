@@ -32,7 +32,7 @@ once, which takes under a minute.
 2. Click **Explore** on the monthly one. A chart shows its whole history
    added together, 58 months from January 2022 to October 2026. The buttons
    `bottles`, `dollars` and `liters` switch the number it shows.
-3. **About this table**, below the chart, opens the technical part: the table it reads, `u4cast.iowa_liquor_monthly`, with
+3. Below the chart is the technical part: the table it reads, `u4cast.iowa_liquor_monthly`, with
    399,736 rows, each column and what it is used for, and the first rows.
 
 ## 2. A stored forecast (5 minutes)
@@ -123,7 +123,7 @@ once. The steps below change some of them.
 
 1. **What to forecast**: `bottles`, `dollars` or `liters`. Choose `dollars`
    to forecast sales value.
-2. **One series per**: leave all four columns on (county, category, vendor,
+2. **Dimension list**: leave all four columns on (county, category, vendor,
    item). Turning one off adds its values together.
 3. **Only these**: under `county` choose `LINN`. The panel on the right now
    says the forecast covers 569 series.
@@ -142,8 +142,8 @@ once. The steps below change some of them.
    **Issues compared**: three issues predicted October 2026, and the actual
    is next to them.
 
-To see a summed-up forecast, make another with only `category` on under "One
-series per" and no filter: 42 series, one per category, statewide.
+To see a summed-up forecast, make another with only `category` on in the
+"Dimension list" and no filter: 42 series, one per category, statewide.
 
 ## 8. A CSV of your own (3 minutes)
 

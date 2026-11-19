@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type Fill, type Frequency, type Profile } from "../api";
-import { ErrorNote, Icon, Loading, RowsTable, useCrumbs } from "../components/ui";
+import { ErrorNote, Hint, Icon, Loading, RowsTable, useCrumbs } from "../components/ui";
 import { FILLS, FREQUENCY_NAMES, period } from "../format";
 
 export function AddDataset() {
@@ -256,9 +256,12 @@ function PickColumns({ table }: { table: string }) {
       </div>
 
       <div className="form-section">
-        <h2>What tells one series from another?</h2>
+        <h2>
+          Dimension list
+          <Hint text="The columns that describe what a row is about, for example store, category and item. Every forecast of this dataset chooses its level from this list." />
+        </h2>
         <p className="sub">
-          Each combination of values in these columns is one series, for example a store and an item.
+          The columns a forecast can be made by, for example a store and an item.
         </p>
         <div className="chips">
           {data.columns

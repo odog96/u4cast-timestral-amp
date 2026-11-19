@@ -238,3 +238,12 @@ export function useDebounced<T>(value: T, delay = 300): T {
   }, [value, delay]);
   return settled;
 }
+
+/** A small "?" that explains a term when pointed at or focused. */
+export function Hint({ text }: { text: string }) {
+  return (
+    <span className="hint-mark" tabIndex={0} role="note" aria-label={text} data-tip={text}>
+      ?
+    </span>
+  );
+}
