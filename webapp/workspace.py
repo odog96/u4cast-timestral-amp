@@ -264,6 +264,10 @@ class Workspace:
                 self.chart(record.forecast_id, None)
             except Exception:
                 logger.info("Could not read %s ahead of time", record.forecast_name, exc_info=True)
+        try:
+            self.cleanup()  # measures every forecast table once, which takes seconds
+        except Exception:
+            logger.info("Could not measure the forecast tables ahead of time", exc_info=True)
 
     def connect(self) -> None:
         try:
