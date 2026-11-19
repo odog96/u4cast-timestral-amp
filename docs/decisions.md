@@ -202,6 +202,26 @@ after his first look at the running application.
     data could be forecast in bottles only. How it is built is Claude's and
     is listed under "Proposed by Claude".
 
+Decision 38 was made by Oliver on 19 November 2026 in a Claude Code session,
+after he put the 2022 front end next to this one.
+
+38. **The screens follow the flow of the 2022 application: datasets, then
+    the forecasts of a dataset, then one forecast.** Oliver: "I have a
+    dashboard. I can click into a forecast option for that dataset. That
+    will give me a dataset forecast combination page. That page will show
+    all previous forecasts, and it will give you the option of forecasting
+    a new object." And: "Don't fundamentally change what you've created for
+    the front end but just take my suggestions." What he asked for:
+    - a dashboard that lists the datasets, each with Forecast and Explore;
+    - one page per dataset with all its forecasts and a way to make a new
+      one; forecasts are not shown next to datasets;
+    - Explore keeps the detail about a dataset;
+    - the new forecast form offers the models deployed in the workbench.
+      Today that is one. Later it can be other sizes of Timestral, "or even
+      other models";
+    - exploring a forecast drills down by the dimensions it was made with;
+    - the light palette of the 2022 application, made newer.
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -339,6 +359,27 @@ The following are the details of decision 37, chosen on 18 November 2026.
 - **A forecast name is offered,** made from the number and the horizon, for
   example "Dollars, 12 months ahead".
 
+The following are the details of decision 38, chosen on 19 November 2026.
+
+- **Which workbench models are offered.** Those of the project whose
+  description has the word u4cast, which the deploy step writes, and the
+  one the settings name. The description also says which model it serves,
+  as "Serves mistralai/Timestral-209M". Any workbench model that takes the
+  same request can be offered this way; only Timestral is built and tested.
+- **A reissue and the accuracy check use the model the forecast was made
+  with.** If that model is gone, they use the default.
+- **Drill-down.** Each dimension of a forecast has a list of its values.
+  Choosing some adds up the series that have them; choosing all of them
+  gives one series. The range of a part is found the way the range of the
+  total is: by forecasting the summed history once. A list offers only the
+  values that go with what is chosen in the others.
+- **The palette.** A blue-white page, navy text and indigo for actions,
+  taken from the 2022 application. The chart colors are unchanged, because
+  they are the ones that passed the color-blindness check. Dark mode is
+  unchanged.
+- **Addresses.** `/datasets/<name>` is Explore, `/datasets/<name>/forecasts`
+  the forecasts of a dataset.
+
 The following follow from decision 36 and were chosen on 18 November 2026.
 
 - **The demo tables.** The ingest writes two, and keeps only the series that
@@ -465,6 +506,11 @@ the application on 18 November 2026.
     in either direction. Claude's recommendation: yes, as part of the
     deferred "Anomaly adjustment", after the demo. For the demo, show the
     weekly SKU examples, where the result does not depend on it.
+13. **Should a dataset or a forecast be deletable?** The 2022 dashboard had
+    Delete on both. Here nothing is ever overwritten, and there is no
+    delete. Claude's recommendation: yes for both, after the demo. Deleting
+    a dataset would remove it from the list and leave its table alone;
+    deleting a forecast would remove its rows from Iceberg.
 
 ## Demo dataset comparison (17 November 2026)
 
@@ -1448,3 +1494,10 @@ Claude Code adds dated lines here.
 - 18 November 2026. Fixed a fault: the running application read a history
   table's dates once and kept them, so a new month in the table could not
   be reissued until a restart. It now asks again after 60 seconds.
+- 19 November 2026. Decision 38. The first screen is a table of datasets
+  with Forecast and Explore; a dataset's forecasts have their own page; the
+  new forecast form has a model choice read from the workbench; a forecast
+  is drilled into by its dimensions; the palette is lighter. Why: Oliver
+  showed the 2022 front end and asked for its flow on what was built.
+- 19 November 2026. Open question for Oliver: the 2022 dashboard could
+  delete a dataset and a forecast. This one cannot. See open question 13.

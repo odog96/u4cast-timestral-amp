@@ -49,6 +49,7 @@ MAX_SLICE_ROWS = 5_000_000
 MAX_SERIES = 25_000
 DATES_FRESH_SECONDS = 60
 MODELS_FRESH_SECONDS = 60
+MAX_DRILL_VALUES = 2_000
 """How long the dates of a history table are trusted before it is asked again for new rows."""
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 # Measured on the workbench model with 4 vCPU: see docs/decisions.md, check 6.
@@ -978,7 +979,12 @@ class Workspace:
             raise UserError("That series is not part of this forecast.") from None
 
     def _band_of_total(
-        self, record: ForecastRecord, panel: Panel, rows: np.ndarray, history_steps: int
+        self,
+        record: ForecastRecord,
+        panel: Panel,
+        rows: np.ndarray,
+        history_steps: int,
+        part: str = "",
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """Return the low and high of the total as shares of its forecast.
 
@@ -986,8 +992,9 @@ class Workspace:
         wider than the range of the total. So the total's own history is
         forecast once, and its range is taken from that.
         """
-        if record.forecast_id in self._bands:
-            return self._bands[record.forecast_id]
+        key = record.forecast_id + part
+        if key in self._bands:
+            return self._bands[key]
         if not self._model_lock.acquire(blocking=False):
             return None  # a job is using the model; the range appears once it is done
         try:
@@ -1000,14 +1007,63 @@ class Workspace:
             self._model_lock.release()
         middle = np.where(result.forecast[0] > 0, result.forecast[0], np.nan)
         band = (result.low[0] / middle, result.high[0] / middle)
-        self._bands[record.forecast_id] = band
+        if len(self._bands) > 200:
+            self._bands.clear()
+        self._bands[key] = band
         return band
 
-    def chart(self, forecast_id: str, ts_id: str | None) -> dict[str, Any]:
-        """Return history, forecast and range of one series, or of the total of all series."""
+    def _drilled(
+        self, record: ForecastRecord, panel: Panel, drill: Mapping[str, Any]
+    ) -> pd.DataFrame:
+        """Return the series of a forecast that have the chosen dimension values."""
+        chosen = {column: str(value) for column, value in drill.items() if value not in (None, "")}
+        unknown = [column for column in chosen if column not in record.dimension_columns]
+        if unknown:
+            raise UserError(f"This forecast has no dimension named {', '.join(unknown)}.")
+        series = panel.series[panel.series[TS_ID].isin(self.values(record)[TS_ID].unique())]
+        for column, value in chosen.items():
+            series = series[series[column].astype(str) == value]
+        return series
+
+    def drill_options(self, forecast_id: str, drill: Mapping[str, Any]) -> dict[str, Any]:
+        """Return, for each dimension of a forecast, the values left to choose from.
+
+        The values of one dimension are those that go with what is chosen in
+        the others, so every combination offered has series behind it.
+        """
+        record = self.record(forecast_id)
+        panel = self._panel_of(record)
+        options = {}
+        for column in record.dimension_columns:
+            others = {c: v for c, v in drill.items() if c != column}
+            found = self._drilled(record, panel, others)[column].dropna().astype(str).unique()
+            options[column] = sorted(found)[:MAX_DRILL_VALUES]
+        return {
+            "dimensions": list(record.dimension_columns),
+            "options": options,
+            "series": len(self._drilled(record, panel, drill)),
+        }
+
+    def chart(
+        self, forecast_id: str, ts_id: str | None, drill: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return history, forecast and range: of one series, of the series that have the
+        chosen dimension values added together, or of the total of all series."""
         record = self.record(forecast_id)
         values = self.values(record)
         panel = self._panel_of(record)
+        part, part_label = "", ""
+        if not ts_id and drill and any(v not in (None, "") for v in drill.values()):
+            kept = self._drilled(record, panel, drill)
+            if kept.empty:
+                raise UserError("No series of this forecast has those values.")
+            if len(kept) == 1:
+                ts_id = str(kept[TS_ID].iloc[0])
+            else:
+                values = values[values[TS_ID].isin(kept[TS_ID])]
+                chosen = {c: str(v) for c, v in drill.items() if v not in (None, "")}
+                part = "|" + json.dumps(sorted(chosen.items()))
+                part_label = " · ".join(chosen[c] for c in record.dimension_columns if c in chosen)
         history_steps = int(panel.calendar.steps_of([record.history_end_date])[0]) + 1
         horizon = record.horizon
         note = None
@@ -1026,13 +1082,15 @@ class Workspace:
             rows = rows[rows >= 0]
             actual = _sum(panel.values[rows])
             forecast = values.groupby("step")["forecast"].sum().sort_index().to_numpy()
-            band = self._band_of_total(record, panel, rows, history_steps)
+            band = self._band_of_total(record, panel, rows, history_steps, part)
             if band is None:
                 low = high = np.full(horizon, np.nan)
                 note = "The range of the total is not available right now."
             else:
                 low, high = forecast * band[0], forecast * band[1]
             label = f"Total of {len(ids):,} series"
+            if part_label:
+                label = f"{part_label}: {len(ids):,} series added together"
             count = len(ids)
         after = np.full(horizon, np.nan)
         known = actual[history_steps : history_steps + horizon]

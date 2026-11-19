@@ -26,18 +26,19 @@ once, which takes under a minute.
 ## 1. The data (2 minutes)
 
 1. The first screen says what the application does in three steps, and
-   under "Your data" lists two datasets: "Iowa liquor sales, monthly" and
-   "Iowa liquor sales, weekly". Each has a **New forecast** button.
-2. Click the name of the monthly one. A chart shows its whole history added
-   together, 58 months from January 2022 to October 2026. The buttons
+   under "Your datasets" lists two: "Iowa liquor sales, monthly" and "Iowa
+   liquor sales, weekly". Each row has two buttons, **Forecast** and
+   **Explore**.
+2. Click **Explore** on the monthly one. A chart shows its whole history
+   added together, 58 months from January 2022 to October 2026. The buttons
    `bottles`, `dollars` and `liters` switch the number it shows.
-3. Below are its forecasts. **About this table**, at the bottom, opens the
-   technical part: the table it reads, `u4cast.iowa_liquor_monthly`, with
+3. **About this table**, below the chart, opens the technical part: the table it reads, `u4cast.iowa_liquor_monthly`, with
    399,736 rows, each column and what it is used for, and the first rows.
 
 ## 2. A stored forecast (5 minutes)
 
-Open the weekly dataset, then the forecast **SKUs, 4 weeks ahead**.
+On the first screen click **Forecast** on the weekly dataset. The page lists
+every forecast made from it. Open **SKUs, 4 weeks ahead**.
 
 1. The heading says 300 series, 4 weeks ahead. Four tiles give the forecast
    total, the same weeks a year earlier, the history used and how many weeks
@@ -47,8 +48,10 @@ Open the weekly dataset, then the forecast **SKUs, 4 weeks ahead**.
    **Table**, top right of the chart, shows the same numbers as a table.
    The history has two stretches at about twice the usual level, December
    2022 and August to October 2025. They are in the source data.
-3. In **Find one series** type `fireball` and pick one. The chart changes to
-   that one SKU. Clear it to go back to the total.
+3. Above the chart is one list per dimension: Category, Vendor, Item. Choose
+   a category: the chart now shows that category's SKUs added together.
+   Choose a vendor too and it narrows again. **Show the total** goes back.
+   **Find one series** does the same by search: type `fireball`.
 4. Below the chart, the list of series can be searched and sorted. Click a
    row to chart it.
 5. The picker at the top right, "History to ...", switches between the issues
@@ -112,7 +115,8 @@ Open the tab **Stored rows**.
 
 ## 7. A forecast of your own (5 minutes)
 
-Open the monthly dataset and click **New forecast**.
+On the first screen click **Forecast** on the monthly dataset, then **New
+forecast**.
 
 Every choice on this screen has a default, so **Create forecast** works at
 once. The steps below change some of them.
@@ -130,7 +134,9 @@ once. The steps below change some of them.
 6. **Check accuracy on the past**: leave it on, from 4 past dates, 3 months
    apart. The screen lists the dates: July 2025, October 2025, January 2026
    and April 2026.
-7. A name is offered; change it if you like. Click **Create forecast**. It
+7. On the right, **Model** lists the models deployed in the workbench; today
+   there is one. A name is offered; change it if you like. Click **Create
+   forecast**. It
    takes about half a minute and then opens.
 8. Reissue it with history to August 2026, then September 2026. Open
    **Issues compared**: three issues predicted October 2026, and the actual
@@ -144,7 +150,7 @@ series per" and no filter: 42 series, one per category, statewide.
 The file `docs/sample-sales.csv` in this repo is a made-up example: 6
 series, 36 months, 216 rows. Download it to your computer first.
 
-1. On the first screen click **Bring your data**, then **Upload a CSV**.
+1. On the first screen click **Add a dataset**, then **Upload a CSV**.
 2. The screen should say the table has 216 rows, and suggest `month` as the
    date, `units` as the value to forecast, and `region` and `product` as
    what tells series apart. Frequency: "Detected monthly".
@@ -175,7 +181,7 @@ In a session terminal, in the project folder:
 .venv/bin/pytest
 ```
 
-Expected: 158 passed, 12 skipped. The 12 need Spark or the model weights and
+Expected: 161 passed, 12 skipped. The 12 need Spark or the model weights and
 are skipped unless asked for; the README says how.
 
 ## What to expect that is not a fault

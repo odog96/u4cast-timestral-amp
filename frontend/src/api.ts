@@ -305,8 +305,19 @@ export const api = {
     get<Comparison>(
       `/api/datasets/${e(dataset)}/forecasts/${e(name)}/compare${query({ ts_id: tsId, kind })}`,
     ),
-  chart: (forecastId: string, tsId: string | null) =>
-    get<ChartData>(`/api/forecasts/${forecastId}/chart${query({ ts_id: tsId })}`),
+  chart: (forecastId: string, tsId: string | null, drill: Record<string, string> = {}) =>
+    get<ChartData>(
+      `/api/forecasts/${forecastId}/chart${query({
+        ts_id: tsId,
+        drill: !tsId && Object.keys(drill).length ? JSON.stringify(drill) : null,
+      })}`,
+    ),
+  drill: (forecastId: string, drill: Record<string, string>) =>
+    get<{ dimensions: string[]; options: Record<string, string[]>; series: number }>(
+      `/api/forecasts/${forecastId}/drill${query({
+        drill: Object.keys(drill).length ? JSON.stringify(drill) : null,
+      })}`,
+    ),
   series: (forecastId: string, q: string, sort: string, limit: number, offset = 0) =>
     get<SeriesPage>(`/api/forecasts/${forecastId}/series${query({ q, sort, limit, offset })}`),
   rows: (forecastId: string, limit = 25) =>

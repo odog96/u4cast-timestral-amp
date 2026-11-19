@@ -47,3 +47,6 @@ frontend/dist/
 metastore_db/
 derby.log
 spark-warehouse/
+
+# The 2022 front end, here for reference only. It is private.
+u4cast_web/

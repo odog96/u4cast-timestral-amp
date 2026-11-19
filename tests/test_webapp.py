@@ -556,3 +556,35 @@ def test_workbench_models_become_choices():
         ("timestral-small", "a/Small-28M", False),
     ]
     assert served_name("nothing here") is None
+
+
+def test_a_forecast_is_drilled_into_by_its_dimensions(client):
+    add_dataset(client)
+    new_forecast(client, cutoffs=0)
+    overview = client.get("/api/datasets/Sales/forecasts/Monthly demand").json()
+    address = f"/api/forecasts/{overview['issues'][0]['forecast_id']}"
+
+    everything = client.get(f"{address}/drill").json()
+    assert everything["dimensions"] == ["county", "sku"]
+    assert everything["options"] == {"county": COUNTIES, "sku": SKUS}
+    assert everything["series"] == 6
+
+    # One county: its three SKUs added together.
+    polk = client.get(f"{address}/chart", params={"drill": '{"county": "POLK"}'}).json()
+    total = client.get(f"{address}/chart").json()
+    assert polk["series"] == 3
+    assert polk["label"].startswith("POLK")
+    assert polk["actual"][0] == 100 + 200 + 300
+    assert polk["forecast"][0] == pytest.approx(total["forecast"][0] / 2)
+
+    # Every dimension chosen: one series, with its own range.
+    one = client.get(
+        f"{address}/chart", params={"drill": '{"county": "POLK", "sku": "RUM"}'}
+    ).json()
+    assert (one["series"], one["actual"][0]) == (1, 200.0)
+    assert one["ts_id"] == "county=POLK|sku=RUM"
+
+    nothing = client.get(f"{address}/chart", params={"drill": '{"county": "NOWHERE"}'})
+    assert nothing.status_code == 400
+    wrong = client.get(f"{address}/chart", params={"drill": '{"store": "1"}'})
+    assert wrong.status_code == 400

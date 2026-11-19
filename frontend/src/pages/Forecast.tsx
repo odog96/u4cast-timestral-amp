@@ -286,11 +286,25 @@ function ForecastTab({
   selected: Selected;
   onSelect: (series: Selected) => void;
 }) {
+  // Drill down: choose a value in any dimension and the chart adds up the series that have it.
+  const [drill, setDrill] = useState<Record<string, string>>({});
   const chart = useQuery({
-    queryKey: ["chart", issue.forecast_id, selected?.ts_id ?? null],
-    queryFn: () => api.chart(issue.forecast_id, selected?.ts_id ?? null),
+    queryKey: ["chart", issue.forecast_id, selected?.ts_id ?? null, drill],
+    queryFn: () => api.chart(issue.forecast_id, selected?.ts_id ?? null, drill),
     placeholderData: (previous) => previous,
   });
+  const options = useQuery({
+    queryKey: ["drill", issue.forecast_id, drill],
+    queryFn: () => api.drill(issue.forecast_id, drill),
+    placeholderData: (previous) => previous,
+  });
+  const choose = (column: string, value: string) => {
+    const next = { ...drill };
+    if (value) next[column] = value;
+    else delete next[column];
+    setDrill(next);
+    if (selected) onSelect(null);
+  };
   const data = chart.data;
   const season = SEASON[frequency];
   const built = data && forecastSeries(data);
@@ -339,6 +353,58 @@ function ForecastTab({
           />
         </div>
       </section>
+
+      {options.data && options.data.dimensions.length > 0 && (
+        <section className="card card-pad">
+          <div className="stack" style={{ gap: 12 }}>
+            <div
+              style={{
+                display: "grid",
+                gap: 14,
+                gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+              }}
+            >
+              {options.data.dimensions.map((column) => (
+                <div className="field" key={column} style={{ minWidth: 0 }}>
+                  <label htmlFor={`drill-${column}`}>{capital(column)}</label>
+                  <select
+                    id={`drill-${column}`}
+                    className="select"
+                    value={selected ? "" : drill[column] ?? ""}
+                    onChange={(event) => choose(column, event.target.value)}
+                  >
+                    <option value="">All</option>
+                    {(options.data.options[column] ?? []).map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="spread muted" style={{ fontSize: 13 }}>
+              <span>
+                Drill down by any of these.{" "}
+                {selected
+                  ? "Showing one series"
+                  : `${options.data.series.toLocaleString()} series added together`}
+              </span>
+              {(Object.keys(drill).length > 0 || selected) && (
+                <button
+                  className="btn small"
+                  onClick={() => {
+                    setDrill({});
+                    if (selected) onSelect(null);
+                  }}
+                >
+                  Show the total
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {chart.error && <ErrorNote error={chart.error} />}
       {!built || !data ? (

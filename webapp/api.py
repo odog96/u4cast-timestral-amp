@@ -7,6 +7,7 @@ returns the front end, which does its own routing.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,19 @@ class ReissueRequest(BaseModel):
 class AccuracyRequest(BaseModel):
     cutoffs: int = 4
     cutoff_step: int = 1
+
+
+def _drill(text: str | None) -> dict[str, Any]:
+    """Read the chosen dimension values, sent as JSON text: {"county": "POLK"}."""
+    if not text:
+        return {}
+    try:
+        chosen = json.loads(text)
+    except ValueError as error:
+        raise UserError("The chosen dimension values could not be read.") from error
+    if not isinstance(chosen, dict):
+        raise UserError("The chosen dimension values could not be read.")
+    return chosen
 
 
 def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
@@ -201,8 +215,14 @@ def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
         return workspace.compare(name, forecast_name, ts_id or None, kind)
 
     @app.get("/api/forecasts/{forecast_id}/chart")
-    def chart(forecast_id: str, ts_id: str | None = None) -> dict[str, Any]:
-        return workspace.chart(forecast_id, ts_id or None)
+    def chart(
+        forecast_id: str, ts_id: str | None = None, drill: str | None = None
+    ) -> dict[str, Any]:
+        return workspace.chart(forecast_id, ts_id or None, _drill(drill))
+
+    @app.get("/api/forecasts/{forecast_id}/drill")
+    def drill_options(forecast_id: str, drill: str | None = None) -> dict[str, Any]:
+        return workspace.drill_options(forecast_id, _drill(drill))
 
     @app.get("/api/forecasts/{forecast_id}/series")
     def series(
