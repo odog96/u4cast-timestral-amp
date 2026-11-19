@@ -26,7 +26,7 @@ const REASONS: Record<string, string> = {
 export function NewForecast() {
   const { dataset: name = "" } = useParams();
   const here = `/datasets/${encodeURIComponent(name)}`;
-  useCrumbs([{ label: name, to: here }, { label: "New forecast" }]);
+  useCrumbs([{ label: name, to: `${here}/forecasts` }, { label: "New forecast" }]);
   const overview = useQuery({ queryKey: ["dataset", name], queryFn: () => api.dataset(name) });
 
   if (overview.isLoading) {

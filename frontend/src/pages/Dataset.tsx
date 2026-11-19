@@ -1,4 +1,4 @@
-// One dataset: its forecasts, and the history it reads.
+// One dataset, two screens: Explore shows its history, Forecasts lists what was forecast from it.
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -10,7 +10,7 @@ import { day, FILLS, FREQUENCY_NAMES, period, periods } from "../format";
 
 export function DatasetPage() {
   const { dataset: name = "" } = useParams();
-  useCrumbs([{ label: name }]);
+  useCrumbs([{ label: name }, { label: "Explore" }]);
   const overview = useQuery({ queryKey: ["dataset", name], queryFn: () => api.dataset(name) });
 
   if (overview.isLoading) {
@@ -49,79 +49,15 @@ export function DatasetPage() {
             . One series per {dataset.dimension_columns.join(", ") || "date"}.
           </p>
         </div>
-        <Link to={`${here}/forecast`} className="btn primary large">
-          <Icon name="plus" />
-          New forecast
+        <Link to={`${here}/forecasts`} className="btn primary large">
+          Forecasts
+          <Icon name="arrow" />
         </Link>
       </div>
 
       <div className="stack">
         <History dataset={dataset} />
 
-        <section className="card">
-          <div className="card-head">
-            <div>
-              <h2>Forecasts</h2>
-              <div className="sub">Each forecast keeps every issue made of it. Open one to explore it.</div>
-            </div>
-          </div>
-          {dataset.forecast_groups.length === 0 ? (
-            <div className="empty">
-              <h2>No forecast yet</h2>
-              <p>Choose which series to forecast and how far ahead. The result is stored in Iceberg.</p>
-              <Link to={`${here}/forecast`} className="btn primary">
-                <Icon name="plus" />
-                New forecast
-              </Link>
-            </div>
-          ) : (
-            <div className="table-wrap">
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th>Forecast</th>
-                    <th>Of</th>
-                    <th>History to</th>
-                    <th className="r">Series</th>
-                    <th className="r">Ahead</th>
-                    <th className="r">Issues</th>
-                    <th>Accuracy</th>
-                    <th>Last issued</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dataset.forecast_groups.map((group) => (
-                    <tr key={group.forecast_name} className="clickable">
-                      <td>
-                        <Link
-                          to={`${here}/forecasts/${encodeURIComponent(group.forecast_name)}`}
-                          className="cell-main"
-                          style={{ display: "block" }}
-                        >
-                          {group.forecast_name}
-                        </Link>
-                        <span className="cell-sub">By {group.latest.dimension_columns.join(", ") || "total"}</span>
-                      </td>
-                      <td>{group.latest.target_column}</td>
-                      <td className="nowrap">{period(group.latest.history_end_date, dataset.frequency)}</td>
-                      <td className="r">{group.latest.series?.toLocaleString() ?? "–"}</td>
-                      <td className="r nowrap">{periods(group.latest.horizon, dataset.frequency)}</td>
-                      <td className="r">{group.issues}</td>
-                      <td>
-                        {group.backtests > 0 ? (
-                          <span className="badge accent">Checked on {group.backtests} dates</span>
-                        ) : (
-                          <span className="faint">Not checked</span>
-                        )}
-                      </td>
-                      <td className="nowrap muted">{day(group.latest.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
 
         <details className="card about">
           <summary>
@@ -217,3 +153,113 @@ function History({ dataset }: { dataset: DatasetOverview }) {
 }
 
 const UNIT = { daily: "day", weekly: "week", monthly: "month", quarterly: "quarter" } as const;
+
+/** The forecasts of one dataset: every one made so far, and the way to make a new one. */
+export function DatasetForecasts() {
+  const { dataset: name = "" } = useParams();
+  useCrumbs([{ label: name }, { label: "Forecasts" }]);
+  const overview = useQuery({ queryKey: ["dataset", name], queryFn: () => api.dataset(name) });
+  if (overview.isLoading) {
+    return (
+      <main className="page">
+        <Loading what="Reading the forecasts" />
+      </main>
+    );
+  }
+  if (overview.error || !overview.data) {
+    return (
+      <main className="page">
+        <ErrorNote error={overview.error ?? new Error("The dataset could not be read.")} />
+      </main>
+    );
+  }
+  const dataset = overview.data;
+  const here = `/datasets/${encodeURIComponent(name)}`;
+  return (
+    <main className="page">
+      <div className="page-head">
+        <div>
+          <h1>Forecasts of {dataset.name}</h1>
+          <p className="sub">
+            Every forecast made from this dataset. Open one to explore it, or make a new one.
+          </p>
+        </div>
+        <div className="row">
+          <Link to={here} className="btn">
+            Explore the data
+          </Link>
+          <Link to={`${here}/forecast`} className="btn primary large">
+            <Icon name="plus" />
+            New forecast
+          </Link>
+        </div>
+      </div>
+      <div className="stack">
+        <section className="card">
+          <div className="card-head">
+            <div>
+              <h2>Forecasts</h2>
+              <div className="sub">Each forecast keeps every issue made of it. Open one to explore it.</div>
+            </div>
+          </div>
+          {dataset.forecast_groups.length === 0 ? (
+            <div className="empty">
+              <h2>No forecast yet</h2>
+              <p>Choose which series to forecast and how far ahead. The result is stored in Iceberg.</p>
+              <Link to={`${here}/forecast`} className="btn primary">
+                <Icon name="plus" />
+                New forecast
+              </Link>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Forecast</th>
+                    <th>Of</th>
+                    <th>History to</th>
+                    <th className="r">Series</th>
+                    <th className="r">Ahead</th>
+                    <th className="r">Issues</th>
+                    <th>Accuracy</th>
+                    <th>Last issued</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dataset.forecast_groups.map((group) => (
+                    <tr key={group.forecast_name} className="clickable">
+                      <td>
+                        <Link
+                          to={`${here}/forecasts/${encodeURIComponent(group.forecast_name)}`}
+                          className="cell-main"
+                          style={{ display: "block" }}
+                        >
+                          {group.forecast_name}
+                        </Link>
+                        <span className="cell-sub">By {group.latest.dimension_columns.join(", ") || "total"}</span>
+                      </td>
+                      <td>{group.latest.target_column}</td>
+                      <td className="nowrap">{period(group.latest.history_end_date, dataset.frequency)}</td>
+                      <td className="r">{group.latest.series?.toLocaleString() ?? "–"}</td>
+                      <td className="r nowrap">{periods(group.latest.horizon, dataset.frequency)}</td>
+                      <td className="r">{group.issues}</td>
+                      <td>
+                        {group.backtests > 0 ? (
+                          <span className="badge accent">Checked on {group.backtests} dates</span>
+                        ) : (
+                          <span className="faint">Not checked</span>
+                        )}
+                      </td>
+                      <td className="nowrap muted">{day(group.latest.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}

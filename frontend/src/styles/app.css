@@ -310,13 +310,13 @@ textarea {
 }
 
 .btn.primary {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--surface);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--action-ink);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ink) 86%, var(--surface));
+  background: color-mix(in srgb, var(--action) 86%, var(--ink));
 }
 
 .btn.ghost {
@@ -461,9 +461,9 @@ textarea {
 }
 
 .chip.on {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--surface);
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--action-ink);
 }
 
 .chip.static {

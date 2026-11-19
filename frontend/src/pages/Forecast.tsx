@@ -46,7 +46,7 @@ const blanks = (count: number): Values => Array.from({ length: count }, () => nu
 export function ForecastPage() {
   const { dataset = "", forecast: name = "" } = useParams();
   const datasetPath = `/datasets/${encodeURIComponent(dataset)}`;
-  useCrumbs([{ label: dataset, to: datasetPath }, { label: name }]);
+  useCrumbs([{ label: dataset, to: `${datasetPath}/forecasts` }, { label: name }]);
   const overview = useQuery({
     queryKey: ["forecast", dataset, name],
     queryFn: () => api.forecast(dataset, name),

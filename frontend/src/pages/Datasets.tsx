@@ -18,10 +18,6 @@ export function Datasets() {
             series in it. No code, and no model to train.
           </p>
         </div>
-        <Link to="/datasets/new" className="btn primary large">
-          <Icon name="plus" />
-          Bring your data
-        </Link>
       </div>
 
       <section className="card card-pad" style={{ marginBottom: 20 }}>
@@ -52,39 +48,66 @@ export function Datasets() {
 
       {datasets.isLoading && <Loading what="Loading your data" />}
       {datasets.error && <ErrorNote error={datasets.error} />}
-      {datasets.data && datasets.data.length > 0 && (
-        <h2 style={{ margin: "0 0 12px" }}>Your data</h2>
-      )}
-      <div className="grid-cards">
-        {(datasets.data ?? []).map((dataset) => {
-          const here = `/datasets/${encodeURIComponent(dataset.name)}`;
-          return (
-            <div key={dataset.name} className="card card-pad">
-              <div className="spread" style={{ alignItems: "flex-start" }}>
-                <h2>
-                  <Link to={here}>{dataset.name}</Link>
-                </h2>
-                <span className="badge">{FREQUENCY_NAMES[dataset.frequency]}</span>
-              </div>
-              <div className="muted" style={{ margin: "6px 0 16px", fontSize: 13 }}>
-                By {dataset.dimension_columns.join(", ") || "date only"}
-              </div>
-              <div className="spread">
-                <Link to={`${here}/forecast`} className="btn primary">
-                  <Icon name="plus" />
-                  New forecast
-                </Link>
-                <Link to={here} className="row muted" style={{ gap: 6, fontSize: 13 }}>
-                  {dataset.forecasts === 0
-                    ? "No forecast yet"
-                    : `${dataset.forecasts} forecast${dataset.forecasts === 1 ? "" : "s"}`}
-                  <Icon name="arrow" size={14} />
-                </Link>
-              </div>
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h2>Your datasets</h2>
+            <div className="sub">
+              Forecast opens a dataset's forecasts. Explore shows its history.
             </div>
-          );
-        })}
-      </div>
+          </div>
+          <Link to="/datasets/new" className="btn">
+            <Icon name="plus" />
+            Add a dataset
+          </Link>
+        </div>
+        {datasets.data && datasets.data.length === 0 ? (
+          <div className="empty">
+            <h2>No dataset yet</h2>
+            <p>Point the application at an Iceberg table, or upload a CSV file, to start forecasting.</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Dataset</th>
+                  <th>Frequency</th>
+                  <th>One series per</th>
+                  <th className="r">Forecasts</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {(datasets.data ?? []).map((dataset) => {
+                  const here = `/datasets/${encodeURIComponent(dataset.name)}`;
+                  return (
+                    <tr key={dataset.name}>
+                      <td>
+                        <Link to={`${here}/forecasts`} className="cell-main" style={{ display: "block" }}>
+                          {dataset.name}
+                        </Link>
+                        <span className="cell-sub mono">{dataset.source_table}</span>
+                      </td>
+                      <td>{FREQUENCY_NAMES[dataset.frequency]}</td>
+                      <td>{dataset.dimension_columns.join(", ") || "date only"}</td>
+                      <td className="r">{dataset.forecasts}</td>
+                      <td className="r nowrap">
+                        <Link to={`${here}/forecasts`} className="btn primary small">
+                          Forecast
+                        </Link>{" "}
+                        <Link to={here} className="btn small">
+                          Explore
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </main>
   );
 }

@@ -5,7 +5,7 @@ import { api } from "./api";
 import { Crumb, CrumbProvider, Crumbs, Icon } from "./components/ui";
 import { modelName } from "./format";
 import { AddDataset } from "./pages/AddDataset";
-import { DatasetPage } from "./pages/Dataset";
+import { DatasetForecasts, DatasetPage } from "./pages/Dataset";
 import { Datasets } from "./pages/Datasets";
 import { ForecastPage } from "./pages/Forecast";
 import { NewForecast } from "./pages/NewForecast";
@@ -94,6 +94,7 @@ export function App() {
           <Route path="/" element={<Datasets />} />
           <Route path="/datasets/new" element={<AddDataset />} />
           <Route path="/datasets/:dataset" element={<DatasetPage />} />
+          <Route path="/datasets/:dataset/forecasts" element={<DatasetForecasts />} />
           <Route path="/datasets/:dataset/forecast" element={<NewForecast />} />
           <Route path="/datasets/:dataset/forecasts/:forecast" element={<ForecastPage />} />
           <Route
