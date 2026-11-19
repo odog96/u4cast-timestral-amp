@@ -12,6 +12,8 @@ from fastapi.testclient import TestClient
 from fake_store import FakeStore
 from u4cast.layout import Kind
 from u4cast.model import StandInForecaster
+from u4cast.serving import ModelChoice, served_name, workbench_choices
+from u4cast.settings import Settings
 from webapp.api import create_app
 from webapp.workspace import Workspace
 
@@ -493,3 +495,64 @@ def test_new_rows_in_the_history_table_are_noticed(client, store, monkeypatch):
     )
     assert job["state"] == "done", job
     assert store.saved_forecasts[-1].history_end_date == dt.date(2025, 5, 1)
+
+
+def test_a_forecast_chooses_its_model_and_a_reissue_keeps_it(store, tmp_path):
+    small, large = StandInForecaster(), StandInForecaster()
+    small.model_name, large.model_name = "mistralai/Timestral-28M", "mistralai/Timestral-209M"
+    choices = [
+        ModelChoice(key="timestral", forecaster=large, default=True),
+        ModelChoice(key="timestral-small", forecaster=small),
+    ]
+    workspace = Workspace(lambda: store, large, lambda: choices)
+    workspace.connect()
+    client = TestClient(create_app(workspace, front_end=tmp_path))
+    add_dataset(client)
+    assert client.get("/api/models").json() == [
+        {"key": "timestral", "model_name": "mistralai/Timestral-209M", "default": True},
+        {"key": "timestral-small", "model_name": "mistralai/Timestral-28M", "default": False},
+    ]
+    new_forecast(client, cutoffs=0, history_end="2024-10-01")
+    new_forecast(
+        client, forecast_name="Small", model="timestral-small", cutoffs=1, history_end="2024-10-01"
+    )
+    used = {record.forecast_name: record.model_name for record in store.saved_forecasts}
+    assert used == {
+        "Monthly demand": "mistralai/Timestral-209M",
+        "Small": "mistralai/Timestral-28M",
+    }
+    again = client.post("/api/datasets/Sales/forecasts/Small/reissue", json={})
+    assert finish(client, again)["state"] == "done"
+    assert store.saved_forecasts[-1].model_name == "mistralai/Timestral-28M"
+
+    refused = client.post(
+        "/api/datasets/Sales/forecasts",
+        json={"forecast_name": "Other", "dimension_columns": ["sku"], "model": "prophet"},
+    )
+    assert refused.status_code == 400
+    assert "no model named prophet" in refused.json()["detail"]
+
+
+def test_workbench_models_become_choices():
+    class Model:
+        def __init__(self, name, access_key, description):
+            self.name, self.access_key, self.description = name, access_key, description
+
+    settings = Settings.from_environment(
+        {"U4CAST_MODEL_ACCESS_KEY": "key-1", "CDSW_DOMAIN": "example.com", "CDSW_APIV2_KEY": "k"}
+    )
+    found = workbench_choices(
+        settings,
+        [
+            Model(
+                "timestral-small", "key-2", "Timestral forecasts for u4cast. Serves a/Small-28M."
+            ),
+            Model("churn", "key-3", "Something else entirely."),
+            Model("timestral", "key-1", "An older description."),
+        ],
+    )
+    assert [(c.key, c.model_name, c.default) for c in found] == [
+        ("timestral", "mistralai/Timestral-209M", True),
+        ("timestral-small", "a/Small-28M", False),
+    ]
+    assert served_name("nothing here") is None

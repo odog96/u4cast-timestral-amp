@@ -59,7 +59,10 @@ def find_or_create_model(client: cmlapi.CMLServiceApi, project_id: str, name: st
     request = cmlapi.CreateModelRequest(
         project_id=project_id,
         name=name,
-        description="Timestral forecasts for u4cast. Takes histories and a horizon.",
+        description=(
+            "Timestral forecasts for u4cast. "
+            f"Serves {os.environ.get('U4CAST_MODEL_NAME', 'mistralai/Timestral-209M')}."
+        ),
         disable_authentication=False,
     )
     return client.create_model(request, project_id)

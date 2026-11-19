@@ -18,7 +18,8 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -38,6 +39,7 @@ from u4cast.layout import (
 )
 from u4cast.model import Forecaster
 from u4cast.prepare import TS_ID, Fill, Panel, prepare
+from u4cast.serving import ModelChoice
 from webapp.jobs import Job
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,7 @@ logger = logging.getLogger(__name__)
 MAX_SLICE_ROWS = 5_000_000
 MAX_SERIES = 25_000
 DATES_FRESH_SECONDS = 60
+MODELS_FRESH_SECONDS = 60
 """How long the dates of a history table are trusted before it is asked again for new rows."""
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 # Measured on the workbench model with 4 vCPU: see docs/decisions.md, check 6.
@@ -159,9 +162,18 @@ class _Recent:
 class Workspace:
     """The data lake, the model and the caches behind the web server."""
 
-    def __init__(self, connect: Callable[[], Any], forecaster: Forecaster) -> None:
+    def __init__(
+        self,
+        connect: Callable[[], Any],
+        forecaster: Forecaster,
+        choices: Callable[[], list[ModelChoice]] | None = None,
+    ) -> None:
         self._connect = connect
-        self.forecaster = forecaster
+        self._default = forecaster
+        self._active: Forecaster | None = None
+        self._list_choices = choices
+        self._choices: list[ModelChoice] = []
+        self._choices_read = 0.0
         self.state = "starting"
         self.error: str | None = None
         self._store: Any = None
@@ -222,6 +234,54 @@ class Workspace:
                 else "The connection to the data lake is still starting."
             )
         return self._store
+
+    @property
+    def forecaster(self) -> Forecaster:
+        """The model in use: the one a running job chose, or the default."""
+        return self._active or self._default
+
+    def choices(self) -> list[ModelChoice]:
+        """Return the models a forecast can be made with, the default first."""
+        fresh = time.monotonic() - self._choices_read < MODELS_FRESH_SECONDS
+        if not self._choices or not fresh:
+            found = self._list_choices() if self._list_choices else []
+            if not found:
+                key = self._default.model_name.split("/")[-1]
+                found = [ModelChoice(key=key, forecaster=self._default, default=True)]
+            self._choices, self._choices_read = found, time.monotonic()
+        return self._choices
+
+    def models(self) -> list[dict[str, Any]]:
+        return [
+            {"key": c.key, "model_name": c.model_name, "default": c.default} for c in self.choices()
+        ]
+
+    def _chosen(self, key: str | None) -> Forecaster:
+        """Return the model with that key. No key means the default."""
+        choices = self.choices()
+        if not key:
+            return next((c.forecaster for c in choices if c.default), self._default)
+        for choice in choices:
+            if choice.key == key:
+                return choice.forecaster
+        raise UserError(f"There is no model named {key} to forecast with.")
+
+    def _model_of(self, record: ForecastRecord) -> Forecaster:
+        """Return the model a stored forecast was made with, or the default if it is gone."""
+        for choice in self.choices():
+            if choice.model_name == record.model_name:
+                return choice.forecaster
+        return self._chosen(None)
+
+    @contextmanager
+    def _using(self, forecaster: Forecaster) -> Iterator[None]:
+        """Hold the model for one job. Jobs run one at a time."""
+        with self._model_lock:
+            self._active = forecaster
+            try:
+                yield
+            finally:
+                self._active = None
 
     def status(self) -> dict[str, Any]:
         return {
@@ -781,9 +841,12 @@ class Workspace:
             self._save(issued, dataset)
         return len(steps)
 
-    def check_new_forecast(self, dataset: str, forecast_name: str, horizon: int) -> str:
+    def check_new_forecast(
+        self, dataset: str, forecast_name: str, horizon: int, model: str | None = None
+    ) -> str:
         """Refuse a new forecast that cannot be made, before any work starts. Return its name."""
         self.dataset(dataset)
+        self._chosen(model)
         name = forecast_name.strip()
         if not name:
             raise UserError("Give the forecast a name.")
@@ -804,9 +867,11 @@ class Workspace:
         horizon: int,
         cutoffs: int,
         cutoff_step: int,
+        model: str | None = None,
     ) -> dict[str, Any]:
         dataset = self.dataset(spec.dataset)
-        name = self.check_new_forecast(spec.dataset, forecast_name, horizon)
+        name = self.check_new_forecast(spec.dataset, forecast_name, horizon, model)
+        chosen = self._chosen(model)
         job.report("Loading history from the data lake", 0.03)
         panel = self.panel(spec)
         if panel.n_series == 0:
@@ -816,7 +881,7 @@ class Workspace:
             )
         steps = self._cutoff_steps(panel, horizon, cutoffs, cutoff_step)
         forecast_share = 0.85 / (1 + len(steps))
-        with self._model_lock:
+        with self._using(chosen):
             issued = self._with_progress(
                 job,
                 f"Forecasting {panel.n_series:,} series",
@@ -863,7 +928,7 @@ class Workspace:
                 f"This forecast was already issued with history to {ends}. "
                 "There is no newer data to reissue it with."
             )
-        with self._model_lock:
+        with self._using(self._model_of(latest)):
             issued = self._with_progress(
                 job,
                 f"Forecasting {panel.n_series:,} series with history to {ends}",
@@ -900,7 +965,7 @@ class Workspace:
                 "There is no new cutoff to check: the history is too short for this horizon, "
                 "or these cutoffs were already checked."
             )
-        with self._model_lock:
+        with self._using(self._model_of(latest)):
             count = self._backtest(job, panel, latest, steps, 0.08, 0.98)
         return {"dataset": dataset, "forecast_name": name, "backtests": count}
 
@@ -927,7 +992,7 @@ class Workspace:
             return None  # a job is using the model; the range appears once it is done
         try:
             history = np.nansum(panel.history(history_steps)[rows], axis=0)[None, :]
-            result = self.forecaster.forecast(history, record.horizon)
+            result = self._model_of(record).forecast(history, record.horizon)
         except Exception:
             logger.warning("Could not forecast the total of %s", record.forecast_id, exc_info=True)
             return None

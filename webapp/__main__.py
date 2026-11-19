@@ -11,7 +11,7 @@ import os
 
 import uvicorn
 
-from u4cast.serving import forecaster_from_settings
+from u4cast.serving import forecaster_from_settings, model_choices
 from u4cast.storage import Store, spark_session
 from webapp.api import create_app
 from webapp.workspace import Workspace
@@ -19,7 +19,7 @@ from webapp.workspace import Workspace
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s")
-    workspace = Workspace(lambda: Store(spark_session()), forecaster_from_settings())
+    workspace = Workspace(lambda: Store(spark_session()), forecaster_from_settings(), model_choices)
     workspace.start()
     uvicorn.run(
         create_app(workspace),

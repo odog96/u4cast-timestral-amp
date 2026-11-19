@@ -7,7 +7,7 @@ import { api, type DatasetOverview, type Frequency, type Job, type SliceRequest 
 import { JobProgress } from "../components/JobProgress";
 import { MultiSelect } from "../components/pickers";
 import { ErrorNote, Icon, Loading, useCrumbs, useDebounced } from "../components/ui";
-import { capital, duration, period, periods, unit } from "../format";
+import { capital, duration, modelName, period, periods, unit } from "../format";
 
 const HORIZONS: Record<Frequency, number[]> = {
   daily: [7, 14, 28, 90],
@@ -51,6 +51,9 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
   const frequency = dataset.frequency;
   const dates = dataset.dates;
   const [target, setTarget] = useState<string>(dataset.target_column);
+  const models = useQuery({ queryKey: ["models"], queryFn: api.models });
+  const [model, setModel] = useState<string | null>(null);
+  const chosenModel = model ?? models.data?.find((choice) => choice.default)?.key ?? null;
   const [dimensions, setDimensions] = useState<string[]>(dataset.dimension_columns);
   const [filters, setFilters] = useState<Record<string, (string | number)[]>>({});
   const [start, setStart] = useState<string | null>(null);
@@ -86,7 +89,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
     retry: false,
   });
   const create = useMutation({
-    mutationFn: () => api.createForecast(dataset.name, { ...request, forecast_name: chosenName }),
+    mutationFn: () => api.createForecast(dataset.name, { ...request, forecast_name: chosenName, model: chosenModel }),
     onSuccess: setJob,
   });
   const onDone = useCallback(
@@ -409,6 +412,27 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
               <JobProgress job={job} onDone={onDone} onDismiss={() => setJob(null)} />
             ) : (
               <div className="stack" style={{ gap: 12 }}>
+                <div className="field">
+                  <label htmlFor="forecast-model">Model</label>
+                  <select
+                    id="forecast-model"
+                    className="select"
+                    value={chosenModel ?? ""}
+                    onChange={(event) => setModel(event.target.value)}
+                  >
+                    {(models.data ?? []).map((choice) => (
+                      <option key={choice.key} value={choice.key}>
+                        {modelName(choice.model_name)}
+                        {choice.key !== modelName(choice.model_name) ? ` (${choice.key})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="hint">
+                    {(models.data?.length ?? 0) > 1
+                      ? "The models deployed in this workbench for forecasting."
+                      : "The one model deployed in this workbench. Others appear here when deployed."}
+                  </div>
+                </div>
                 <div className="field">
                   <label htmlFor="forecast-name">Name</label>
                   <input

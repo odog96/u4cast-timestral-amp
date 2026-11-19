@@ -101,6 +101,12 @@ export interface DatasetOverview extends Dataset {
   values_table: string;
 }
 
+export interface ModelChoice {
+  key: string;
+  model_name: string;
+  default: boolean;
+}
+
 export interface SliceRequest {
   dimension_columns: string[];
   slice_filter: Record<string, (string | number)[]>;
@@ -262,6 +268,7 @@ const query = (values: Record<string, string | number | null | undefined>) => {
 
 export const api = {
   status: () => get<Status>("/api/status"),
+  models: () => get<ModelChoice[]>("/api/models"),
   datasets: () => get<Dataset[]>("/api/datasets"),
   dataset: (name: string) => get<DatasetOverview>(`/api/datasets/${e(name)}`),
   saveDataset: (body: Omit<Dataset, "forecasts" | "issues">) => post<Dataset>("/api/datasets", body),
@@ -281,7 +288,7 @@ export const api = {
     body.append("file", file);
     return request<{ table: string; rows: number }>("/api/uploads", { method: "POST", body });
   },
-  createForecast: (name: string, body: SliceRequest & { forecast_name: string }) =>
+  createForecast: (name: string, body: SliceRequest & { forecast_name: string; model: string | null }) =>
     post<Job>(`/api/datasets/${e(name)}/forecasts`, body),
   forecast: (dataset: string, name: string) =>
     get<ForecastOverview>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}`),

@@ -51,6 +51,7 @@ class SliceRequest(BaseModel):
 
 class ForecastRequest(SliceRequest):
     forecast_name: str
+    model: str | None = None
 
 
 class DatasetRequest(BaseModel):
@@ -95,6 +96,10 @@ def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
     @app.get("/api/status")
     def status() -> dict[str, Any]:
         return {**workspace.status(), "jobs": [job.to_json() for job in jobs.active()]}
+
+    @app.get("/api/models")
+    def models() -> list[dict[str, Any]]:
+        return workspace.models()
 
     # Datasets
 
@@ -143,12 +148,18 @@ def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
 
     @app.post("/api/datasets/{name}/forecasts")
     def create_forecast(name: str, body: ForecastRequest) -> dict[str, Any]:
-        workspace.check_new_forecast(name, body.forecast_name, body.horizon)
+        workspace.check_new_forecast(name, body.forecast_name, body.horizon, body.model or None)
         spec = body.spec(name)
         job = jobs.submit(
             f"Forecast {body.forecast_name}",
             lambda job: workspace.create_forecast(
-                job, spec, body.forecast_name, body.horizon, body.cutoffs, body.cutoff_step
+                job,
+                spec,
+                body.forecast_name,
+                body.horizon,
+                body.cutoffs,
+                body.cutoff_step,
+                body.model or None,
             ),
         )
         return job.to_json()
