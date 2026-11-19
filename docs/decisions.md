@@ -409,10 +409,13 @@ The following are the details of decision 39, chosen on 19 November 2026.
   forecast goes through Spark as before. A table that Spark cannot read,
   such as a Hive managed table, would be found and then fail to open. That
   was not tested.
-- **Which smaller models.** The 28M and the 123M model, as the workbench
-  models `timestral-28m` and `timestral-123m`, with 2 vCPU and 4 GB each.
-  Oliver said "the other two"; Mistral publishes three smaller sizes, and
-  the 5M model is one setting away (`U4CAST_MORE_MODELS`).
+- **Which smaller model.** The 28M model, as the workbench model
+  `timestral-28m`, with 2 vCPU and 4 GB. Oliver first said "the other two"
+  and then "one more smaller Timestral model". Mistral also publishes a 5M
+  and a 123M model; either is one setting away (`U4CAST_MORE_MODELS`).
+- **Only deployed models are offered.** Oliver: "look at the list of
+  available models in this project (the ones that are deployed)". A
+  workbench model that is stopped or still building is not in the list.
 - **They are deployed by a job,** "u4cast: deploy more models", made by
   `serving/more_models_job.py`. It is not an install step.
 - **One image, any size.** A replica is told which model to serve by an

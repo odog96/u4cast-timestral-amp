@@ -13,8 +13,8 @@ default model is enough to use the application.
 Settings, from environment variables:
 
 - `U4CAST_MORE_MODELS`: the Timestral models to deploy, by their Hugging Face
-  names, separated by commas. Default: the 28M and the 123M model. Mistral
-  also publishes `mistralai/Timestral-5M`.
+  names, separated by commas. Default: the 28M model. Mistral also
+  publishes `mistralai/Timestral-5M` and `mistralai/Timestral-123M`.
 - `U4CAST_MORE_MODELS_CPU`, `U4CAST_MORE_MODELS_MEMORY`: vCPU and GB for each
   replica. Default 2 and 4: these models are smaller than the default one.
 """
@@ -31,7 +31,7 @@ from deploy_workbench_model import deploy
 
 logger = logging.getLogger("u4cast.deploy_more_models")
 
-DEFAULT = "mistralai/Timestral-28M,mistralai/Timestral-123M"
+DEFAULT = "mistralai/Timestral-28M"
 
 
 def workbench_name(model_name: str) -> str:

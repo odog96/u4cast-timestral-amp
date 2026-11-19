@@ -118,8 +118,9 @@ loaded in the same process, chosen with `U4CAST_SERVING=in_process`.
 
 The new forecast screen offers every workbench model of the project that
 serves forecasts for this application. The install deploys one. To add the
-smaller Timestral models, run `python3 serving/more_models_job.py` in a
-session: it creates and runs a job that deploys them.
+smaller Timestral model, run `python3 serving/more_models_job.py` in a
+session: it creates and runs a job that deploys it. Only models that are deployed
+at the moment are offered.
 
 ## Develop
 
@@ -149,7 +150,7 @@ All are environment variables, set on the project.
 | `U4CAST_SERVING` | the endpoint, when its key is set | `workbench` or `in_process` |
 | `U4CAST_MODEL_ACCESS_KEY` | set by the model deploy step | Which workbench model to call |
 | `U4CAST_BATCH_SIZE` | `500` | The most series in one model call |
-| `U4CAST_MORE_MODELS` | the 28M and 123M models | Which further Timestral models `serving/more_models_job.py` deploys |
+| `U4CAST_MORE_MODELS` | the 28M model | Which further Timestral models `serving/more_models_job.py` deploys |
 | `U4CAST_SPARK_MODE` | `local` | `local` runs Spark in the application's container; `cluster` uses workers |
 | `U4CAST_SPARK_CONNECTION` | the project's first | The Spark data connection |
 | `U4CAST_SPARK_DRIVER_MEMORY` | `2g` | Memory for Spark in the container |

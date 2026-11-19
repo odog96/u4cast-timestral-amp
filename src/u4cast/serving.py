@@ -61,11 +61,21 @@ def workbench_choices(settings: Settings, models: list[Any]) -> list[ModelChoice
     return sorted(choices, key=lambda choice: (not choice.default, choice.key))
 
 
+def is_deployed(client: Any, project_id: str, model_id: str) -> bool:
+    """Say whether a workbench model has a deployment that is running now."""
+    for build in client.list_model_builds(project_id, model_id, page_size=50).model_builds:
+        found = client.list_model_deployments(project_id, model_id, build.id, page_size=50)
+        if any(d.status == "deployed" for d in found.model_deployments):
+            return True
+    return False
+
+
 def model_choices(settings: Settings | None = None) -> list[ModelChoice]:
     """Return the models a forecast can be made with, the default one first.
 
     With the workbench model endpoint, these are the project's workbench
-    models that serve forecasts for this application. Otherwise it is the
+    models that serve forecasts for this application and are deployed at
+    the moment. Otherwise it is the
     one model loaded in this process.
     """
     settings = settings or Settings.from_environment()
@@ -77,8 +87,10 @@ def model_choices(settings: Settings | None = None) -> list[ModelChoice]:
         import cmlapi
 
         client = cmlapi.default_client()
-        models = client.list_models(os.environ["CDSW_PROJECT_ID"], page_size=100).models
-        return workbench_choices(settings, models) or alone
+        project_id = os.environ["CDSW_PROJECT_ID"]
+        models = client.list_models(project_id, page_size=100).models
+        running = [model for model in models if is_deployed(client, project_id, model.id)]
+        return workbench_choices(settings, running) or alone
     except Exception:
         logger.warning("Could not list the workbench models; offering the default", exc_info=True)
         return alone

@@ -13,7 +13,7 @@ from fake_store import FakeStore
 from u4cast.connections import Connection, checked
 from u4cast.layout import Kind
 from u4cast.model import StandInForecaster
-from u4cast.serving import ModelChoice, served_name, workbench_choices
+from u4cast.serving import ModelChoice, is_deployed, served_name, workbench_choices
 from u4cast.settings import Settings
 from webapp.api import create_app
 from webapp.workspace import Workspace
@@ -642,3 +642,21 @@ def test_a_table_is_browsed_to_through_a_data_connection(store, tmp_path):
 
 def test_without_a_catalog_there_is_nothing_to_browse(client):
     assert client.get("/api/connections").json() == {"connections": [], "database": "fake"}
+
+
+def test_only_a_deployed_workbench_model_counts():
+    class Listing:
+        def __init__(self, **fields):
+            self.__dict__.update(fields)
+
+    class Client:
+        def list_model_builds(self, project_id, model_id, page_size):
+            return Listing(model_builds=[Listing(id="b1"), Listing(id="b2")])
+
+        def list_model_deployments(self, project_id, model_id, build_id, page_size):
+            states = {"running": {"b2": ["deployed"]}, "stopped": {"b1": ["stopped"]}}
+            found = states[model_id].get(build_id, [])
+            return Listing(model_deployments=[Listing(status=status) for status in found])
+
+    assert is_deployed(Client(), "p", "running")
+    assert not is_deployed(Client(), "p", "stopped")
