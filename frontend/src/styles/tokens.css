@@ -52,26 +52,45 @@
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
+/* The palette of dark mode. It is written twice, and the two copies must stay
+   identical: once for a browser that prefers dark, once for the moon button.
+   Where a name below is not set in the light block above, the component
+   falls back to the light look it always had. */
+
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --surface-sunk: #141413;
-    --surface-hover: #222220;
-    --ink: #f0efec;
-    --action: #f0efec;
-    --action-ink: #1a1a19;
-    --ink-2: #c3c2b7;
-    --ink-3: #8f8d86;
-    --line: #2c2c2a;
-    --line-strong: #3d3d39;
-    --ring: rgba(255, 255, 255, 0.1);
-    --accent: #3987e5;
-    --accent-strong: #6da7ec;
-    --accent-wash: rgba(57, 135, 229, 0.16);
-    --accent-ink: #ffffff;
-    --focus: rgba(57, 135, 229, 0.55);
+
+    /* Surfaces and text */
+    --page: #0e1621;
+    --surface: #152230;
+    --surface-sunk: #101b28;
+    --ink: #e6edf3;
+    --ink-2: #94a3b8;
+    --ink-3: #7c8ba1;
+    --line: #22344a;
+    --line-strong: #2f4763;
+    --ring: rgba(230, 237, 243, 0.1);
+
+    /* The accent, teal: what can be clicked, what is selected, and a few key numbers. */
+    --accent: #2dd4bf;
+    --accent-strong: #5eead4;
+    --accent-wash: rgba(45, 212, 191, 0.12);
+    --accent-ink: #06231f;
+    --action: #2dd4bf;
+    --action-ink: #06231f;
+    --focus: rgba(45, 212, 191, 0.6);
+    --surface-hover: rgba(45, 212, 191, 0.12);
+    --link: #2dd4bf;
+    --nav-on: #2dd4bf;
+    --tab-on: #2dd4bf;
+    --key-number: #2dd4bf;
+    --btn-ink: #2dd4bf;
+    --step-fill: rgba(45, 212, 191, 0.12);
+    --step-line: transparent;
+    --step-ink: #2dd4bf;
+
+    /* Charts: unchanged. Gray history, blue forecast, orange reference, blue wash. */
     --series-actual: #c3c2b7;
     --series-forecast: #3987e5;
     --series-reference: #d95926;
@@ -81,35 +100,57 @@
     --ramp-3: #3987e5;
     --ramp-4: #6da7ec;
     --ramp-5: #9ec5f4;
+
+    /* The up and down arrows in tables: unchanged. */
     --good: #0ca30c;
-    --critical: #e66767;
-    --warning-fill: #33290d;
-    --warning-ink: #f3d27a;
-    --critical-fill: #331a1a;
+    --up: #0ca30c;
+    --down: #e66767;
+
+    /* Warnings are amber, errors are coral. */
+    --warning-ink: #f5a524;
+    --warning-fill: rgba(245, 165, 36, 0.12);
+    --critical: #f87171;
+    --critical-fill: rgba(248, 113, 113, 0.12);
+
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.6);
+    --shadow-key: rgba(0, 0, 0, 0.3);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0d0d0d;
-  --surface: #1a1a19;
-  --surface-sunk: #141413;
-  --surface-hover: #222220;
-  --ink: #f0efec;
-  --action: #f0efec;
-  --action-ink: #1a1a19;
-  --ink-2: #c3c2b7;
-  --ink-3: #8f8d86;
-  --line: #2c2c2a;
-  --line-strong: #3d3d39;
-  --ring: rgba(255, 255, 255, 0.1);
-  --accent: #3987e5;
-  --accent-strong: #6da7ec;
-  --accent-wash: rgba(57, 135, 229, 0.16);
-  --accent-ink: #ffffff;
-  --focus: rgba(57, 135, 229, 0.55);
+
+  /* Surfaces and text */
+  --page: #0e1621;
+  --surface: #152230;
+  --surface-sunk: #101b28;
+  --ink: #e6edf3;
+  --ink-2: #94a3b8;
+  --ink-3: #7c8ba1;
+  --line: #22344a;
+  --line-strong: #2f4763;
+  --ring: rgba(230, 237, 243, 0.1);
+
+  /* The accent, teal: what can be clicked, what is selected, and a few key numbers. */
+  --accent: #2dd4bf;
+  --accent-strong: #5eead4;
+  --accent-wash: rgba(45, 212, 191, 0.12);
+  --accent-ink: #06231f;
+  --action: #2dd4bf;
+  --action-ink: #06231f;
+  --focus: rgba(45, 212, 191, 0.6);
+  --surface-hover: rgba(45, 212, 191, 0.12);
+  --link: #2dd4bf;
+  --nav-on: #2dd4bf;
+  --tab-on: #2dd4bf;
+  --key-number: #2dd4bf;
+  --btn-ink: #2dd4bf;
+  --step-fill: rgba(45, 212, 191, 0.12);
+  --step-line: transparent;
+  --step-ink: #2dd4bf;
+
+  /* Charts: unchanged. Gray history, blue forecast, orange reference, blue wash. */
   --series-actual: #c3c2b7;
   --series-forecast: #3987e5;
   --series-reference: #d95926;
@@ -119,11 +160,24 @@
   --ramp-3: #3987e5;
   --ramp-4: #6da7ec;
   --ramp-5: #9ec5f4;
+
+  /* The up and down arrows in tables: unchanged. */
   --good: #0ca30c;
-  --critical: #e66767;
-  --warning-fill: #33290d;
-  --warning-ink: #f3d27a;
-  --critical-fill: #331a1a;
+  --up: #0ca30c;
+  --down: #e66767;
+
+  /* Warnings are amber, errors are coral. */
+  --warning-ink: #f5a524;
+  --warning-fill: rgba(245, 165, 36, 0.12);
+  --critical: #f87171;
+  --critical-fill: rgba(248, 113, 113, 0.12);
+
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-2: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-key: rgba(0, 0, 0, 0.3);
+}
+
+/* Colors that are the same in every mode. */
+:root {
+  --shadow-key-light: rgba(11, 11, 11, 0.08);
 }

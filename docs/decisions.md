@@ -1732,3 +1732,16 @@ Claude Code adds dated lines here.
   refused.
 - 19 November 2026. Open for Oliver: drop the three tables of the old
   layout, which are copied and no longer read.
+- 19 November 2026. A palette for dark mode, at Oliver's request. He works
+  in dark mode, so the palette of decision 38 had only ever reached the
+  light version, which he does not see. Dark mode is now a blue-black page
+  (`#0E1621`) with cards (`#152230`), borders (`#22344A`) and one accent,
+  teal `#2DD4BF`, for what can be clicked or is selected and for a few key
+  numbers; amber `#F5A524` for warnings and coral `#F87171` for errors. All
+  of it is defined in `frontend/src/styles/tokens.css`, in two dark blocks
+  that must stay identical. The light block is unchanged. The dark chart
+  colors and the up and down arrows are unchanged; the arrows got their own
+  names, `--up` and `--down`, so that errors could change color without
+  them. No color is typed anywhere else in the front end. Teal was checked
+  on screen against the blue forecast line and the arrows, and kept. No
+  feature changed.

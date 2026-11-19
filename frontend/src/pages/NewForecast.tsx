@@ -355,7 +355,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
               <Loading what="Reading the slice from the data lake" />
             ) : (
               <div style={{ opacity: stale ? 0.55 : 1, transition: "opacity 0.15s" }}>
-                <div className="hero" style={{ margin: "6px 0 2px" }}>
+                <div className="hero key-number" style={{ margin: "6px 0 2px" }}>
                   {data.series.toLocaleString()}
                 </div>
                 <div className="muted" style={{ marginBottom: 14 }}>

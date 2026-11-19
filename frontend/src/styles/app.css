@@ -48,7 +48,7 @@ h3 {
 }
 
 a {
-  color: inherit;
+  color: var(--link, inherit);
   text-decoration: none;
 }
 
@@ -114,6 +114,7 @@ textarea {
   font-weight: 680;
   font-size: 15px;
   letter-spacing: -0.02em;
+  color: var(--ink);
 }
 
 .brand-mark {
@@ -147,7 +148,7 @@ textarea {
 }
 
 .crumbs .here {
-  color: var(--ink);
+  color: var(--nav-on, var(--ink));
   font-weight: 550;
   white-space: nowrap;
   overflow: hidden;
@@ -298,6 +299,7 @@ textarea {
   transition:
     background 0.12s,
     border-color 0.12s;
+  color: var(--btn-ink, inherit);
 }
 
 .btn:hover:not(:disabled) {
@@ -425,9 +427,9 @@ textarea {
   height: 22px;
   margin-right: 9px;
   border-radius: 50%;
-  background: var(--surface-sunk);
-  border: 1px solid var(--line);
-  color: var(--ink-2);
+  background: var(--step-fill, var(--surface-sunk));
+  border: 1px solid var(--step-line, var(--line));
+  color: var(--step-ink, var(--ink-2));
   font-size: 12px;
   font-weight: 650;
   vertical-align: 1px;
@@ -528,8 +530,8 @@ textarea {
 
 .segmented button.on {
   background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 0 0 1px var(--ring), 0 1px 2px rgba(11, 11, 11, 0.08);
+  color: var(--tab-on, var(--ink));
+  box-shadow: 0 0 0 1px var(--ring), 0 1px 2px var(--shadow-key, var(--shadow-key-light));
 }
 
 .tabs {
@@ -556,7 +558,7 @@ textarea {
 }
 
 .tabs button.on {
-  color: var(--ink);
+  color: var(--tab-on, var(--ink));
 }
 
 .tabs button.on::after {
@@ -567,7 +569,7 @@ textarea {
   bottom: -1px;
   height: 2px;
   border-radius: 2px;
-  background: var(--ink);
+  background: var(--tab-on, var(--ink));
 }
 
 .tabs .count {
@@ -705,11 +707,11 @@ table.data.compact th {
 }
 
 .delta.up {
-  color: var(--good);
+  color: var(--up, var(--good));
 }
 
 .delta.down {
-  color: var(--critical);
+  color: var(--down, var(--critical));
 }
 
 /* Meter: a thin bar beside a figure */
@@ -1172,4 +1174,18 @@ details.about[open] > summary {
 .browse .chips {
   max-height: 180px;
   overflow: auto;
+}
+
+/* A few key numbers carry the accent. */
+.key-number {
+  color: var(--key-number, inherit);
+}
+
+/* Names in tables are links. They keep the text color and take the accent on hover,
+   so a table is not a column of color. */
+table.data a.cell-main {
+  color: var(--ink);
+}
+table.data a.cell-main:hover {
+  color: var(--link, var(--ink));
 }

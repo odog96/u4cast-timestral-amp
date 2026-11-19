@@ -57,7 +57,7 @@ export function Datasets() {
               Forecast opens a dataset's forecasts. Explore shows its history.
             </div>
           </div>
-          <Link to="/datasets/new" className="btn">
+          <Link to="/datasets/new" className="btn primary">
             <Icon name="plus" />
             Add a dataset
           </Link>
@@ -92,7 +92,7 @@ export function Datasets() {
                       </td>
                       <td>{FREQUENCY_NAMES[dataset.frequency]}</td>
                       <td>{dataset.dimension_columns.join(", ") || "date only"}</td>
-                      <td className="r">{dataset.forecasts}</td>
+                      <td className="r key-number">{dataset.forecasts}</td>
                       <td className="r nowrap">
                         <Link to={`${here}/forecasts`} className="btn primary small">
                           Forecast
