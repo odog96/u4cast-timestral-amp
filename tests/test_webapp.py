@@ -13,6 +13,7 @@ from fake_store import FakeStore
 from u4cast.connections import Connection, checked
 from u4cast.layout import Kind
 from u4cast.model import StandInForecaster
+from u4cast.production import checked_cron, next_run
 from u4cast.serving import ModelChoice, is_deployed, served_name, workbench_choices
 from u4cast.settings import Settings
 from webapp.api import create_app
@@ -857,3 +858,44 @@ def test_forecasts_not_in_production_can_be_cleaned_up(store, tmp_path):
     assert client.get("/api/datasets/Sales/forecasts/Monthly demand").status_code == 400
     # The name is free again.
     new_forecast(client, cutoffs=0)
+
+
+def test_a_deleted_forecast_does_not_come_back(client, store):
+    add_dataset(client)
+    new_forecast(client, cutoffs=0)
+    workspace = client.app.state.workspace
+    stale = list(store.saved_forecasts)  # what a reading that started before the delete holds
+    client.delete("/api/datasets/Sales/forecasts/Monthly demand")
+
+    class Late:
+        """Storage as the slow reading saw it: the run was still there."""
+
+        def __getattr__(self, name):
+            return getattr(store, name)
+
+        def forecasts(self, *args, **kwargs):
+            return stale
+
+    workspace._store = Late()
+    workspace._read_stored()
+    workspace._store = store
+    assert client.get("/api/datasets/Sales").json()["forecast_groups"] == []
+    assert client.get("/api/cleanup").json()["forecasts"] == []
+
+
+def test_a_schedule_says_when_it_runs_next_and_an_impossible_one_is_refused():
+    monday = dt.datetime(2026, 11, 16, 9, 30, tzinfo=dt.UTC)
+    assert next_run("0 6 1 * *", monday) == dt.datetime(2026, 12, 1, 6, 0, tzinfo=dt.UTC)
+    assert next_run("0 6 * * 1", monday) == dt.datetime(2026, 11, 23, 6, 0, tzinfo=dt.UTC)
+    assert next_run("5-59/10 * * * *", monday) == dt.datetime(2026, 11, 16, 9, 35, tzinfo=dt.UTC)
+    assert next_run("0 6 1 1,4,7,10 *", monday) == dt.datetime(2027, 1, 1, 6, 0, tzinfo=dt.UTC)
+    # A day of the month and a day of the week: either one counts.
+    assert next_run("0 6 1 * 5", monday) == dt.datetime(2026, 11, 20, 6, 0, tzinfo=dt.UTC)
+    assert next_run("0 6 * * 7", monday) == dt.datetime(2026, 11, 22, 6, 0, tzinfo=dt.UTC)
+    assert checked_cron(" 0  6 1 * * ") == "0 6 1 * *"
+    with pytest.raises(ValueError, match="never comes up"):
+        checked_cron("0 6 31 2 *")
+    with pytest.raises(ValueError, match="between 0 and 59"):
+        checked_cron("99 99 * * *")
+    with pytest.raises(ValueError, match="five fields"):
+        checked_cron("every monday")

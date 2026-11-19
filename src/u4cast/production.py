@@ -64,19 +64,82 @@ FORECAST_VARIABLE = "U4CAST_PRODUCTION_FORECAST"
 _FIELD = re.compile(r"^[0-9*/,\-]+$")
 
 
-def checked_cron(cron: str) -> str:
-    """Return a schedule in cron form, five fields, or refuse it.
+_LIMITS = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))
+_FIELDS = ("minute", "hour", "day of the month", "month", "day of the week")
 
-    The fields are minute, hour, day of the month, month and day of the
-    week, for example `0 6 1 * *` for six o'clock on the first of the month.
-    """
+
+def _values(field: str, low: int, high: int, what: str) -> set[int]:
+    """Return the numbers one field of a schedule allows: `*`, `5`, `1-5`, `*/10`, `1,15`."""
+    allowed: set[int] = set()
+    for part in field.split(","):
+        span, _, step = part.partition("/")
+        try:
+            every = int(step) if step else 1
+            if span == "*":
+                first, last = low, high
+            elif "-" in span:
+                first, last = (int(number) for number in span.split("-", 1))
+            else:
+                first = int(span)
+                last = high if step else first
+        except ValueError:
+            raise ValueError(f"The {what} of the schedule, {field}, cannot be read.") from None
+        if every < 1 or first < low or last > high or first > last:
+            raise ValueError(f"The {what} of a schedule is between {low} and {high}, not {field}.")
+        allowed.update(range(first, last + 1, every))
+    return allowed
+
+
+def _parsed(cron: str) -> tuple[list[set[int]], bool, bool]:
     fields = cron.split()
     if len(fields) != 5 or not all(_FIELD.match(field) for field in fields):
         raise ValueError(
             "A schedule has five fields: minute, hour, day of the month, month, "
             "day of the week. For example 0 6 1 * *."
         )
-    return " ".join(fields)
+    limits = zip(fields, _LIMITS, _FIELDS, strict=True)
+    sets = [_values(field, low, high, what) for field, (low, high), what in limits]
+    sets[4] = {day % 7 for day in sets[4]}  # 7 is Sunday, like 0
+    return sets, fields[2] != "*", fields[4] != "*"
+
+
+def next_run(cron: str, after: dt.datetime | None = None) -> dt.datetime | None:
+    """Return the next time a schedule fires after `after`, in UTC, or None if it never does.
+
+    When both a day of the month and a day of the week are given, either
+    one makes a day count, as in cron itself.
+    """
+    (minutes, hours, days, months, weekdays), by_day, by_weekday = _parsed(cron)
+    now = (after or dt.datetime.now(dt.UTC)).astimezone(dt.UTC)
+    start = now.replace(second=0, microsecond=0) + dt.timedelta(minutes=1)
+    for offset in range(366 * 5):
+        date = start.date() + dt.timedelta(days=offset)
+        in_month_day = date.day in days
+        on_weekday = (date.isoweekday() % 7) in weekdays
+        fits = (
+            (in_month_day or on_weekday) if by_day and by_weekday else in_month_day and on_weekday
+        )
+        if date.month not in months or not fits:
+            continue
+        for hour in sorted(hours):
+            for minute in sorted(minutes):
+                moment = dt.datetime(date.year, date.month, date.day, hour, minute, tzinfo=dt.UTC)
+                if moment >= start:
+                    return moment
+    return None
+
+
+def checked_cron(cron: str) -> str:
+    """Return a schedule in cron form, five fields, or refuse it.
+
+    The fields are minute, hour, day of the month, month and day of the
+    week, for example `0 6 1 * *` for six o'clock on the first of the month.
+    A schedule that never fires, such as the 31st of February, is refused.
+    """
+    _parsed(cron)
+    if next_run(cron) is None:
+        raise ValueError("That schedule never comes up: no date fits it. Check the day and month.")
+    return " ".join(cron.split())
 
 
 def _utc(value: Any) -> dt.datetime:

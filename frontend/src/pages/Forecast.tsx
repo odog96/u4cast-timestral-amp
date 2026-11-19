@@ -620,7 +620,7 @@ function Comparison({
         title={selected ? main : data.label}
         subtitle={
           kind === "forecast"
-            ? `${selected && rest ? `${rest}. ` : ""}Each line is one run, named by where its history ended.`
+            ? `${selected && rest ? `${rest}. ` : ""}Each line is one run, named by where its history ended. The 5 newest runs are shown.`
             : `${selected && rest ? `${rest}. ` : ""}Each line is the forecast made from one past date.`
         }
         actions={<SeriesPicker forecastId={pickerFor} selected={selected} onSelect={onSelect} />}

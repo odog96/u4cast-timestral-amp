@@ -104,6 +104,7 @@ export interface Cleanup {
 
 export interface ProductionSchedule {
   cron: string;
+  next_run: string | null;
   state: "active" | "paused";
   job_name: string;
   jobs_address: string | null;

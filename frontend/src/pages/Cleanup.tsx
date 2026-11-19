@@ -14,7 +14,14 @@ export function size(bytes: number): string {
 }
 
 export function age(iso: string): string {
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  // Count calendar days, so that something last run yesterday is "1 day" old.
+  const then = new Date(iso);
+  const now = new Date();
+  const days = Math.round(
+    (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+      Date.UTC(then.getFullYear(), then.getMonth(), then.getDate())) /
+      86_400_000,
+  );
   if (days <= 0) return "today";
   if (days === 1) return "1 day";
   return days < 60 ? `${days} days` : `${Math.round(days / 30)} months`;

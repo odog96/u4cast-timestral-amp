@@ -41,6 +41,18 @@ function when(iso: string): string {
   });
 }
 
+function whenUtc(iso: string): string {
+  return `${new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  })} UTC`;
+}
+
 export function ProductionTab({
   dataset,
   name,
@@ -60,6 +72,7 @@ export function ProductionTab({
   const done = (data: Production) => {
     client.setQueryData(key, data);
     client.invalidateQueries({ queryKey: ["dataset", dataset] });
+    client.invalidateQueries({ queryKey: ["cleanup"] });
   };
   const promote = useMutation({ mutationFn: (cron: string) => api.promote(dataset, name, cron), onSuccess: done });
   const setState = useMutation({
@@ -92,13 +105,21 @@ export function ProductionTab({
         <div className="card-head">
           <div>
             <h2>
-              {schedule ? "In production" : "Put this forecast in production"}
+              {schedule
+                ? schedule.state === "paused"
+                  ? "In production, paused"
+                  : "In production"
+                : "Put this forecast in production"}
               <Hint text="In production, a Cloudera AI job runs this forecast again on a schedule, from the history as it stands that day. Every run is added to this forecast's own table, with its own identifier. If no new history has arrived, the run makes nothing and says so." />
             </h2>
             <div className="sub">
               {schedule
-                ? `${label ?? `On the schedule ${schedule.cron}`} (UTC), since ${when(schedule.since)}. ${
-                    schedule.state === "paused" ? "Paused: it does not run until it is started again." : ""
+                ? `${label ?? `On the schedule ${schedule.cron}`}, in UTC. ${
+                    schedule.state === "paused"
+                      ? "It does not run until it is started again."
+                      : schedule.next_run
+                        ? `Next run: ${whenUtc(schedule.next_run)}.`
+                        : ""
                   }`
                 : "A job then runs it again on a schedule, with the latest data, without anyone clicking."}
             </div>
@@ -113,6 +134,7 @@ export function ProductionTab({
                 disabled={setState.isPending}
                 onClick={() => setState.mutate(schedule.state === "active" ? "paused" : "active")}
               >
+                {setState.isPending && <span className="spinner" />}
                 {schedule.state === "active" ? "Pause" : "Start again"}
               </button>
               <button
@@ -213,9 +235,9 @@ export function ProductionTab({
           <Tile
             label="Repeating last year"
             value={pct(track.total.reference_wape)}
-            note="The same dates, the simplest alternative"
+            note="The error of the simplest alternative, on the same dates. Lower is better"
           />
-          <Tile label="Runs with a forecast" value={track.issues.length} note="Every run that found new data" />
+          <Tile label="Runs with a forecast" value={track.issues.length} note="Each one is in this forecast's table" />
           <Tile
             label="Scheduled runs"
             value={data.runs.length}

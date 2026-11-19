@@ -54,6 +54,7 @@ from u4cast.production import (
     Scheduler,
     checked_cron,
     job_name,
+    next_run,
 )
 from u4cast.serving import ModelChoice
 from u4cast.storage import OWN_TABLES
@@ -201,6 +202,9 @@ class Workspace:
         self._schedules: dict[tuple[str, str], Schedule] = {}
         self._stored_read = 0.0
         self._refresher: threading.Thread | None = None
+        self._writes = 0
+        """Counts what the application itself stored or deleted."""
+        self._deleted: set[str] = set()
         self._table_sizes: dict[str, dict[str, int]] = {}
         self._connect = connect
         self._make_catalog = catalog
@@ -813,15 +817,27 @@ class Workspace:
 
     def _read_stored(self) -> None:
         # Spark is asked outside the lock, so that pages are not held up meanwhile.
+        # If the application itself stored or deleted something in the meantime,
+        # what was read may be older than what it knows: it is thrown away, and
+        # the next reading counts. A run deleted here is never taken back in.
+        with self._lock:
+            before = self._writes
         forecasts = self.store.forecasts()
         schedules = {(s.dataset, s.forecast_name): s for s in self.store.schedules()}
         with self._lock:
+            if self._writes != before:
+                return
             known = {record.forecast_id for record in self._forecasts}
-            new = [record for record in forecasts if record.forecast_id not in known]
+            new = [
+                record
+                for record in forecasts
+                if record.forecast_id not in known and record.forecast_id not in self._deleted
+            ]
         sizes = self.store.forecast_sizes(new) if new else {}
         with self._lock:
-            known = {record.forecast_id for record in self._forecasts}
-            self._forecasts.extend(r for r in new if r.forecast_id not in known)
+            if self._writes != before:
+                return
+            self._forecasts.extend(new)
             self._sizes.update(sizes)
             self._schedules = schedules
             self._stored_read = time.monotonic()
@@ -843,6 +859,7 @@ class Workspace:
             return None
         return {
             "cron": schedule.cron,
+            "next_run": _stamp(next_run(schedule.cron)) if schedule.state == ACTIVE else None,
             "state": schedule.state,
             "job_name": schedule.job_name,
             "jobs_address": self.scheduler.address(schedule.job_id) if self.scheduler else None,
@@ -871,11 +888,13 @@ class Workspace:
                 )
             except Exception as error:
                 logger.exception("Could not create the job %s", title)
-                raise UserError(f"Cloudera AI did not create the job: {error}") from error
+                reason = getattr(error, "reason", None) or str(error).splitlines()[0]
+                raise UserError(f"Cloudera AI did not create the job: {reason}.") from error
             now = dt.datetime.now(dt.UTC)
             schedule = Schedule(dataset, name, cron, ACTIVE, job_id, title, now, now)
             self.store.save_schedule(schedule)
             self._schedules[(dataset, name)] = schedule
+            self._writes += 1
         return self.production(dataset, name)
 
     def _drop_job(self, schedule: Schedule) -> None:
@@ -905,6 +924,7 @@ class Workspace:
             schedule = schedule.changed(state)
             self.store.save_schedule(schedule)
             self._schedules[(dataset, name)] = schedule
+            self._writes += 1
         return self.production(dataset, name)
 
     def run_scheduled(self, dataset: str, name: str) -> dict[str, Any]:
@@ -1114,6 +1134,8 @@ class Workspace:
         with self._lock:
             self.store.delete_forecast(dataset, name, tables)
             gone = {record.forecast_id for record in records}
+            self._deleted |= gone
+            self._writes += 1
             self._forecasts = [r for r in self._forecasts if r.forecast_id not in gone]
             for forecast_id in gone:
                 self._sizes.pop(forecast_id, None)
@@ -1240,6 +1262,7 @@ class Workspace:
         with self._lock:
             self.store.save_forecast(issued, dataset)
             self._forecasts.append(issued.record)
+            self._writes += 1
             self._table_sizes.clear()
             self._sizes[issued.record.forecast_id] = len(issued.rows)
         made_by = issued.record.dimension_columns
