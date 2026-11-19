@@ -14,7 +14,7 @@ import logging
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "amp"))
+sys.path.insert(0, os.path.join(os.getcwd(), "amp"))  # a job has no __file__
 
 from steps import run_job
 

@@ -222,6 +222,19 @@ after he put the 2022 front end next to this one.
     - exploring a forecast drills down by the dimensions it was made with;
     - the light palette of the 2022 application, made newer.
 
+Decision 39 was made by Oliver on 19 November 2026 in a Claude Code session.
+
+39. **A dataset is found by browsing the project's data connections, and
+    the smaller Timestral models are offered next to the default one.**
+    Oliver: "When a user is going to add data, they have their data
+    connections available to them, and from those data connections I can go
+    to a virtual warehouse and then from there to a database." And: "I want
+    to add the smaller versions of the Timestral model. I don't expect
+    users to do it, but perhaps we can add a job to add the other two. I
+    want the application to recognize all the available models." The model
+    choice is called "Forecasting model", after "forecasting technique" in
+    the 2022 application.
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -382,6 +395,29 @@ The following are the details of decision 38, chosen on 19 November 2026.
   explains it. Before, the screens said "one series per".
 - **Addresses.** `/datasets/<name>` is Explore, `/datasets/<name>/forecasts`
   the forecasts of a dataset.
+
+The following are the details of decision 39, chosen on 19 November 2026.
+
+- **What is browsed.** The project's data connections of three kinds: the
+  data lake, used with Spark, and Hive and Impala virtual warehouses. Then
+  the databases a connection shows, then the tables of a database. A
+  virtual warehouse is asked directly, with the `impyla` library, which is
+  a new dependency. S3 connections are not listed.
+- **The table is still read with Spark.** In this environment every
+  connection shows the same 36 databases, because they share one catalog.
+  The connection is the way to find a table; reading its rows for a
+  forecast goes through Spark as before. A table that Spark cannot read,
+  such as a Hive managed table, would be found and then fail to open. That
+  was not tested.
+- **Which smaller models.** The 28M and the 123M model, as the workbench
+  models `timestral-28m` and `timestral-123m`, with 2 vCPU and 4 GB each.
+  Oliver said "the other two"; Mistral publishes three smaller sizes, and
+  the 5M model is one setting away (`U4CAST_MORE_MODELS`).
+- **They are deployed by a job,** "u4cast: deploy more models", made by
+  `serving/more_models_job.py`. It is not an install step.
+- **One image, any size.** A replica is told which model to serve by an
+  environment variable and downloads weights the image does not hold when
+  it starts.
 
 The following follow from decision 36 and were chosen on 18 November 2026.
 

@@ -25,7 +25,7 @@ import logging
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.getcwd(), "serving"))  # a job has no __file__
 
 from deploy_workbench_model import deploy
 

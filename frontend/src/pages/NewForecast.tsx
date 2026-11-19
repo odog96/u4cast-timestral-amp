@@ -416,7 +416,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
             ) : (
               <div className="stack" style={{ gap: 12 }}>
                 <div className="field">
-                  <label htmlFor="forecast-model">Model</label>
+                  <label htmlFor="forecast-model">Forecasting model</label>
                   <select
                     id="forecast-model"
                     className="select"
