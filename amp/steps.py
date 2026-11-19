@@ -35,6 +35,11 @@ def run_job_with_spark(name: str, script: str, cpu: float = 4, memory: float = 8
     differs between workbenches. So the step creates a job through Cloudera
     AI's API, with the add-ons looked up, and runs that.
     """
+    run_job(name, script, cpu, memory, spark=True)
+
+
+def run_job(name: str, script: str, cpu: float = 2, memory: float = 4, spark: bool = False) -> None:
+    """Create the Cloudera AI job `name` if it is not there, run it and wait for it to finish."""
     import cmlapi
 
     sys.path.insert(0, ROOT)
@@ -54,7 +59,7 @@ def run_job_with_spark(name: str, script: str, cpu: float = 4, memory: float = 8
                 cpu=cpu,
                 memory=memory,
                 runtime_identifier=newest_runtime(client),
-                runtime_addon_identifiers=addons(client),
+                runtime_addon_identifiers=addons(client) if spark else [],
             ),
             project_id,
         )

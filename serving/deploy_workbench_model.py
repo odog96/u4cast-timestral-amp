@@ -49,7 +49,9 @@ def newest_runtime(client: cmlapi.CMLServiceApi) -> str:
     return max(runtimes, key=lambda runtime: runtime.full_version).image_identifier
 
 
-def find_or_create_model(client: cmlapi.CMLServiceApi, project_id: str, name: str) -> cmlapi.Model:
+def find_or_create_model(
+    client: cmlapi.CMLServiceApi, project_id: str, name: str, serves: str
+) -> cmlapi.Model:
     search = json.dumps({"name": name})
     for model in client.list_models(project_id, search_filter=search, page_size=100).models:
         if model.name == name:
@@ -59,10 +61,7 @@ def find_or_create_model(client: cmlapi.CMLServiceApi, project_id: str, name: st
     request = cmlapi.CreateModelRequest(
         project_id=project_id,
         name=name,
-        description=(
-            "Timestral forecasts for u4cast. "
-            f"Serves {os.environ.get('U4CAST_MODEL_NAME', 'mistralai/Timestral-209M')}."
-        ),
+        description=(f"Timestral forecasts for u4cast. Serves {serves}."),
         disable_authentication=False,
     )
     return client.create_model(request, project_id)
@@ -97,16 +96,22 @@ def save_access_key(client: cmlapi.CMLServiceApi, project_id: str, access_key: s
     logger.info("Saved the access key in the project as %s", ACCESS_KEY_VARIABLE)
 
 
-def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", stream=sys.stdout)
+def deploy(
+    name: str, serves: str, cpu: float = 4, memory: float = 8, save_key: bool = True
+) -> cmlapi.Model:
+    """Create, build and deploy one workbench model that serves the Timestral model `serves`.
+
+    `save_key` stores its access key in the project as the model the
+    application uses by default. Further models are deployed without it; the
+    application finds them by their description.
+    """
     client = cmlapi.default_client()
     project_id = os.environ["CDSW_PROJECT_ID"]
-    name = os.environ.get("U4CAST_WORKBENCH_MODEL", "timestral")
     runtime = os.environ.get("U4CAST_RUNTIME_IDENTIFIER") or newest_runtime(client)
 
-    model = find_or_create_model(client, project_id, name)
+    model = find_or_create_model(client, project_id, name, serves)
 
-    logger.info("Building %s on %s", MODEL_FILE, runtime)
+    logger.info("Building %s for %s on %s", MODEL_FILE, name, runtime)
     build = client.create_model_build(
         cmlapi.CreateModelBuildRequest(
             project_id=project_id,
@@ -128,18 +133,17 @@ def main() -> None:
         timeout=BUILD_TIMEOUT_SECONDS,
     )
 
-    replica_environment = {}
-    if os.environ.get("U4CAST_MODEL_NAME"):
-        replica_environment["U4CAST_MODEL_NAME"] = os.environ["U4CAST_MODEL_NAME"]
     deployment = client.create_model_deployment(
         cmlapi.CreateModelDeploymentRequest(
             project_id=project_id,
             model_id=model.id,
             build_id=build.id,
-            cpu=float(os.environ.get("U4CAST_MODEL_CPU", 4)),
-            memory=float(os.environ.get("U4CAST_MODEL_MEMORY", 8)),
+            cpu=cpu,
+            memory=memory,
             replicas=1,
-            environment=replica_environment,
+            # The replica loads this model. Weights that are not in the image
+            # are downloaded when it starts.
+            environment={"U4CAST_MODEL_NAME": serves},
         ),
         project_id,
         model.id,
@@ -152,9 +156,20 @@ def main() -> None:
         failed=("failed", "stopped"),
         timeout=DEPLOY_TIMEOUT_SECONDS,
     )
+    if save_key:
+        save_access_key(client, project_id, model.access_key)
+    logger.info("The workbench model %s is deployed and serves %s.", name, serves)
+    return model
 
-    save_access_key(client, project_id, model.access_key)
-    logger.info("The workbench model %s is deployed.", name)
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", stream=sys.stdout)
+    deploy(
+        name=os.environ.get("U4CAST_WORKBENCH_MODEL", "timestral"),
+        serves=os.environ.get("U4CAST_MODEL_NAME", "mistralai/Timestral-209M"),
+        cpu=float(os.environ.get("U4CAST_MODEL_CPU", 4)),
+        memory=float(os.environ.get("U4CAST_MODEL_MEMORY", 8)),
+    )
 
 
 if __name__ == "__main__":
