@@ -837,9 +837,13 @@ class Workspace:
             before = self._schedules.get((dataset, name))
             if before and before.state != RETIRED:
                 self._drop_job(before)
-            job_id = self.scheduler.create(
-                title, cron, {DATASET_VARIABLE: dataset, FORECAST_VARIABLE: name}
-            )
+            try:
+                job_id = self.scheduler.create(
+                    title, cron, {DATASET_VARIABLE: dataset, FORECAST_VARIABLE: name}
+                )
+            except Exception as error:
+                logger.exception("Could not create the job %s", title)
+                raise UserError(f"Cloudera AI did not create the job: {error}") from error
             now = dt.datetime.now(dt.UTC)
             schedule = Schedule(dataset, name, cron, ACTIVE, job_id, title, now, now)
             self.store.save_schedule(schedule)

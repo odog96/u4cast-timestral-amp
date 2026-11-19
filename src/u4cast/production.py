@@ -15,7 +15,6 @@ Two tables, both in the application's database:
 from __future__ import annotations
 
 import datetime as dt
-import json
 import logging
 import os
 import re
@@ -166,7 +165,7 @@ class ClouderaScheduler:
                 memory=self.memory,
                 schedule=checked_cron(cron),
                 timezone="UTC",
-                environment=json.dumps(dict(environment)),
+                environment=dict(environment),
                 runtime_identifier=newest_runtime(client),
                 runtime_addon_identifiers=addons(client),
             ),
