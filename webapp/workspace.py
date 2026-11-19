@@ -200,6 +200,7 @@ class Workspace:
         self.scheduler = scheduler
         self._schedules: dict[tuple[str, str], Schedule] = {}
         self._stored_read = 0.0
+        self._refresher: threading.Thread | None = None
         self._table_sizes: dict[str, dict[str, int]] = {}
         self._connect = connect
         self._make_catalog = catalog
@@ -239,6 +240,11 @@ class Workspace:
 
         def work() -> None:
             self.connect()
+            if self.state == "ready":
+                self._refresher = threading.Thread(
+                    target=self._keep_reading_stored, name="u4cast-refresh", daemon=True
+                )
+                self._refresher.start()
             self.warm()
 
         threading.Thread(target=work, name="u4cast-connect", daemon=True).start()
@@ -788,26 +794,45 @@ class Workspace:
     # Forecasts in production
 
     def refresh(self) -> None:
-        """Read again what a scheduled job may have written: new issues, and the schedules.
+        """Read again what a scheduled job may have written: new runs, and the schedules.
 
-        A job in production appends its issue to Iceberg without telling the
-        application. So the lists the application keeps are read again when
-        they are older than a short while.
+        A job in production appends its run to Iceberg without telling the
+        application. When the application is running, a background thread
+        reads the lists again every little while, so that no page waits for
+        it: reading them takes several seconds. Without that thread, as in a
+        job or a test, the lists are read here when they are old.
         """
-        if time.monotonic() - self._stored_read < STORED_FRESH_SECONDS:
+        if self._refresher is not None:
             return
+        if time.monotonic() - self._stored_read >= STORED_FRESH_SECONDS:
+            self._read_stored()
+
+    def _read_stored(self) -> None:
+        # Spark is asked outside the lock, so that pages are not held up meanwhile.
+        forecasts = self.store.forecasts()
+        schedules = {(s.dataset, s.forecast_name): s for s in self.store.schedules()}
         with self._lock:
-            if time.monotonic() - self._stored_read < STORED_FRESH_SECONDS:
-                return
-            forecasts = self.store.forecasts()
             known = {record.forecast_id for record in self._forecasts}
             new = [record for record in forecasts if record.forecast_id not in known]
-            self._sizes.update(self.store.forecast_sizes(new))
-            self._forecasts.extend(new)
-            self._schedules = {(s.dataset, s.forecast_name): s for s in self.store.schedules()}
+        sizes = self.store.forecast_sizes(new) if new else {}
+        with self._lock:
+            known = {record.forecast_id for record in self._forecasts}
+            self._forecasts.extend(r for r in new if r.forecast_id not in known)
+            self._sizes.update(sizes)
+            self._schedules = schedules
             self._stored_read = time.monotonic()
+            if new:
+                self._table_sizes.clear()
         if new:
-            logger.info("Found %d forecasts written by a job", len(new))
+            logger.info("Found %d runs written by a job", len(new))
+
+    def _keep_reading_stored(self) -> None:
+        while True:
+            time.sleep(max(STORED_FRESH_SECONDS, 5))
+            try:
+                self._read_stored()
+            except Exception:
+                logger.warning("Could not read the lists of runs again", exc_info=True)
 
     def _schedule_json(self, schedule: Schedule | None) -> dict[str, Any] | None:
         if schedule is None or schedule.state == RETIRED:

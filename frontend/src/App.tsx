@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 import { api } from "./api";
@@ -56,9 +56,22 @@ export function App() {
   const status = useQuery({
     queryKey: ["status"],
     queryFn: api.status,
-    refetchInterval: (query) => (query.state.data?.state === "ready" ? false : 1500),
+    refetchInterval: (query) => (query.state.data?.state === "ready" ? 30_000 : 1500),
     staleTime: 0,
   });
+  const client = useQueryClient();
+  const refetchStatus = status.refetch;
+  useEffect(() => {
+    // A request found the server still connecting: check its state now.
+    const check = () => refetchStatus();
+    window.addEventListener("u4cast-not-ready", check);
+    return () => window.removeEventListener("u4cast-not-ready", check);
+  }, [refetchStatus]);
+  const ready = status.data?.state === "ready";
+  useEffect(() => {
+    // Once the server is ready again, ask again for whatever failed while it was not.
+    if (ready) client.invalidateQueries({ predicate: (query) => query.state.status === "error" });
+  }, [ready, client]);
   const state = status.data?.state;
   const dark =
     theme === "dark" || (theme === null && window.matchMedia("(prefers-color-scheme: dark)").matches);

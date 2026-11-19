@@ -300,6 +300,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // The answer was not JSON; keep the status as the message.
     }
+    // 503 means the server is still connecting to the data lake, for example just after a
+    // restart. Say so, and the page shows its "connecting" screen until it is ready.
+    if (response.status === 503) window.dispatchEvent(new Event("u4cast-not-ready"));
     throw new ApiError(detail, response.status);
   }
   return response.json() as Promise<T>;

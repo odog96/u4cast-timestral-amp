@@ -1745,3 +1745,11 @@ Claude Code adds dated lines here.
   them. No color is typed anywhere else in the front end. Teal was checked
   on screen against the blue forecast line and the arrows, and kept. No
   feature changed.
+- 19 November 2026. Two things Oliver met on the Explore screen. He saw "The
+  connection to the data lake is still starting": he had clicked in the
+  minute after a restart. A page that meets that answer now shows the
+  connecting screen and carries on by itself when the server is ready. And
+  timing showed one page load in every 20 seconds waiting 6 to 8 seconds,
+  because the lists of runs and schedules were read again inside a request,
+  a cost that came in with decision 40. A background thread reads them now,
+  and no page waits for it.
