@@ -28,7 +28,9 @@ import {
 } from "../components/ui";
 import { capital, day, figure, modelName, num, pct, period, periods, splitLabel, unit } from "../format";
 
-type Tab = "forecast" | "compare" | "accuracy" | "stored";
+type Tab = "forecast" | "compare" | "accuracy" | "stored" | "production";
+import { ProductionTab } from "./Production";
+
 type Selected = { ts_id: string; label: string } | null;
 
 const SEASON: Record<Frequency, number> = { daily: 7, weekly: 52, monthly: 12, quarterly: 4 };
@@ -140,6 +142,7 @@ function Explore({ overview }: { overview: ForecastOverview }) {
             ["compare", "Issues compared", overview.issues.length],
             ["accuracy", "Accuracy", null],
             ["stored", "Stored rows", null],
+            ["production", "Production", null],
           ] as [Tab, string, number | null][]
         ).map(([id, label, count]) => (
           <button
@@ -165,6 +168,7 @@ function Explore({ overview }: { overview: ForecastOverview }) {
         <AccuracyTab overview={overview} issue={issue} selected={selected} onSelect={setSelected} />
       )}
       {tab === "stored" && <StoredTab issue={issue} frequency={frequency} />}
+      {tab === "production" && <ProductionTab dataset={overview.dataset.name} name={overview.forecast_name} frequency={frequency} />}
     </main>
   );
 }

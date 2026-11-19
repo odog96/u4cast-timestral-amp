@@ -272,6 +272,11 @@ export function DatasetForecasts() {
                           style={{ display: "block" }}
                         >
                           {group.forecast_name}
+                          {group.production && (
+                            <span className="badge accent" style={{ marginLeft: 8 }}>
+                              {group.production.state === "active" ? "In production" : "Paused"}
+                            </span>
+                          )}
                         </Link>
                         <span className="cell-sub">By {group.latest.dimension_columns.join(", ") || "total"}</span>
                       </td>

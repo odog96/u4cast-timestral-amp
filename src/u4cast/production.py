@@ -145,7 +145,9 @@ class ClouderaScheduler:
 
         return cmlapi.default_client(), os.environ["CDSW_PROJECT_ID"]
 
-    def create(self, name: str, cron: str, environment: Mapping[str, str]) -> str:
+    def create(
+        self, name: str, cron: str, environment: Mapping[str, str], script: str = JOB_SCRIPT
+    ) -> str:
         import cmlapi
 
         from webapp.deploy_application import addons, newest_runtime
@@ -158,7 +160,7 @@ class ClouderaScheduler:
             cmlapi.CreateJobRequest(
                 project_id=project_id,
                 name=name,
-                script=JOB_SCRIPT,
+                script=script,
                 kernel="python3",
                 cpu=self.cpu,
                 memory=self.memory,

@@ -84,7 +84,44 @@ export interface ForecastRecord {
   series: number | null;
 }
 
+export interface ProductionSchedule {
+  cron: string;
+  state: "active" | "paused";
+  job_name: string;
+  jobs_address: string | null;
+  since: string;
+}
+
+export interface Production {
+  available: boolean;
+  schedule: ProductionSchedule | null;
+  runs: {
+    ran_at: string;
+    outcome: string;
+    detail: string;
+    history_end_date: string | null;
+    series: number | null;
+    seconds: number | null;
+  }[];
+  track: {
+    target: string;
+    scored_issues: number;
+    total: { wape: number | null; reference_wape: number | null };
+    issues: {
+      forecast_id: string;
+      history_end_date: string;
+      created_at: string;
+      horizon: number;
+      dates_scored: number;
+      wape: number | null;
+      reference_wape: number | null;
+    }[];
+    by_step: { step: number; issues: number; wape: number | null; reference_wape: number | null }[];
+  };
+}
+
 export interface ForecastGroup {
+  production: ProductionSchedule | null;
   forecast_name: string;
   issues: number;
   backtests: number;
@@ -301,6 +338,12 @@ export const api = {
     post<Job>(`/api/datasets/${e(name)}/forecasts`, body),
   forecast: (dataset: string, name: string) =>
     get<ForecastOverview>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}`),
+  production: (dataset: string, name: string) =>
+    get<Production>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}/production`),
+  promote: (dataset: string, name: string, cron: string) =>
+    post<Production>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}/production`, { cron }),
+  productionState: (dataset: string, name: string, state: string) =>
+    post<Production>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}/production/state`, { state }),
   reissue: (dataset: string, name: string, asOf: string | null) =>
     post<Job>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}/reissue`, { as_of: asOf }),
   checkAccuracy: (dataset: string, name: string, cutoffs: number, cutoffStep: number) =>
