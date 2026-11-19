@@ -411,6 +411,13 @@ class Workspace:
 
     def source(self, table: str) -> dict[str, Any]:
         """Return what a history table holds: its columns, its size and its first rows."""
+        database, _, name = table.lower().rpartition(".")
+        mine = database == str(getattr(self._store, "database", "")).lower()
+        if mine and (name in OWN_TABLES or name.startswith("forecast_values_")):
+            raise UserError(
+                f"{table} is a table this application keeps its own records in. "
+                "Choose a table of history."
+            )
         if table not in self._sources:
             with self._lock:
                 try:
@@ -420,7 +427,7 @@ class Workspace:
                 except NotReadyError:
                     raise
                 except Exception as error:
-                    raise UserError(f"The table {table} could not be read: {error}") from error
+                    raise UserError(_table_problem(table, error)) from error
             self._sources[table] = {
                 "table": table,
                 "columns": [{"name": name, "type": kind} for name, kind in columns],
@@ -522,7 +529,11 @@ class Workspace:
         except ValueError as error:
             raise UserError(str(error)) from error
         except Exception as error:
-            raise UserError(f"The data connection could not be read: {error}") from error
+            logger.info("A data connection could not be read", exc_info=True)
+            raise UserError(
+                "This data connection could not be opened from the application. "
+                "Choose another one: they all show the same databases."
+            ) from error
         self._browsed.put(key, (time.monotonic(), answer))
         return answer
 
@@ -605,6 +616,10 @@ class Workspace:
                 last_date=iso(days[-1]) if len(days) else None,
                 periods=len(days),
             )
+        used = [
+            r.dataset for r in self._datasets.values() if r.source_table.lower() == table.lower()
+        ]
+        result["used_by"] = used
         return result
 
     def save_dataset(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -1825,3 +1840,17 @@ def _stamp(value: dt.datetime) -> str:
     """Write a time read from storage, which has no zone, as UTC."""
     stamp = value.to_pydatetime() if hasattr(value, "to_pydatetime") else value
     return (stamp if stamp.tzinfo else stamp.replace(tzinfo=dt.UTC)).isoformat()
+
+
+def _table_problem(table: str, error: Exception) -> str:
+    """Say in plain words why a table could not be read."""
+    text = str(error)
+    if (
+        "TABLE_OR_VIEW_NOT_FOUND" in text
+        or "cannot be found" in text
+        or "not found" in text.lower()
+    ):
+        hint = "" if "." in table else " Write it as database.table."
+        return f"There is no table named {table}.{hint} Check the database and the table name."
+    first = text.splitlines()[0] if text else type(error).__name__
+    return f"The table {table} could not be read: {first[:200]}"

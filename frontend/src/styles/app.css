@@ -421,6 +421,7 @@ textarea {
 }
 
 .step-no {
+  flex-shrink: 0;
   display: inline-grid;
   place-items: center;
   width: 22px;

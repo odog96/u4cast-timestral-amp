@@ -139,8 +139,9 @@ function PickColumns({ table }: { table: string }) {
     setDimensions((current) => current ?? data.suggested.dimension_columns);
   }, [data]);
   useEffect(() => {
-    if (data?.frequency) setFrequency(data.frequency);
-  }, [data?.frequency]);
+    // The frequency belongs to the date column: a column with no dates has none.
+    if (data) setFrequency(data.frequency ?? null);
+  }, [data, data?.frequency, dateColumn]);
 
   const save = useMutation({
     mutationFn: api.saveDataset,
@@ -176,6 +177,12 @@ function PickColumns({ table }: { table: string }) {
         <p className="sub">
           <span className="mono">{data.table}</span> has {data.rows.toLocaleString()} rows.
         </p>
+        {(data.used_by?.length ?? 0) > 0 && (
+          <div className="notice warning" style={{ marginBottom: 14 }}>
+            This table is already the dataset {data.used_by?.join(", ")}. A new forecast can be made
+            from that dataset; there is no need to add the table again.
+          </div>
+        )}
         <div className="row wrap" style={{ gap: 16, alignItems: "flex-start" }}>
           <div className="field" style={{ flex: "1 1 220px" }}>
             <label htmlFor="date-column">Date</label>
@@ -186,7 +193,10 @@ function PickColumns({ table }: { table: string }) {
               onChange={(event) => setDateColumn(event.target.value)}
             >
               {!dateColumn && <option value="">Choose a column</option>}
-              {data.columns.map((column) => (
+              {(data.date_columns.length
+                ? data.columns.filter((column) => data.date_columns.includes(column.name))
+                : data.columns
+              ).map((column) => (
                 <option key={column.name} value={column.name}>
                   {column.name} ({column.type})
                 </option>
@@ -372,6 +382,7 @@ function Browse({ table, onChoose }: { table: string | null; onChoose: (t: strin
           onChange={(event) => {
             setConnection(event.target.value);
             setDatabase(null);
+            onChoose("");
           }}
         >
           {start.data.connections.map((c) => (
@@ -388,7 +399,10 @@ function Browse({ table, onChoose }: { table: string | null; onChoose: (t: strin
           id="browse-database"
           className="select"
           value={chosenDatabase ?? ""}
-          onChange={(event) => setDatabase(event.target.value)}
+          onChange={(event) => {
+            setDatabase(event.target.value);
+            onChoose("");
+          }}
           disabled={!databases.data}
         >
           {(databases.data ?? []).map((name) => (

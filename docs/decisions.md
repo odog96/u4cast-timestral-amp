@@ -1753,3 +1753,34 @@ Claude Code adds dated lines here.
   because the lists of runs and schedules were read again inside a request,
   a cost that came in with decision 40. A background thread reads them now,
   and no page waits for it.
+- 19 November 2026. Three test agents walked the live application in a
+  headless browser, as first-time users: bringing data in and Explore; a
+  forecast end to end; production and clean-up. No crash, and every number
+  they checked added up (rows = series x horizon, drill-down parts = total,
+  track record against the runs). Pause, start again and take out of
+  production were confirmed against the real scheduler. Faults found and
+  fixed the same day:
+  - a deleted forecast could come back as a broken entry about 30 seconds
+    later, because the background reading of runs, added that day, could
+    hold a list from before the delete;
+  - the pointer on a chart read a date 50 pixels to the left, so a forecast
+    could not be read with the mouse;
+  - a horizon of 0 was quietly made 1; a schedule that never fires, such as
+    31 February, was accepted; a bad schedule showed a raw error;
+  - a production forecast did not say when it runs next;
+  - a wrong table name and an unreachable data connection showed raw
+    technical text; the application's own tables could be picked as a
+    dataset; a table already in use gave no warning; changing the date
+    column kept the old frequency;
+  - the words issue and "one series per" were left in two places.
+  Found and not changed: the time estimate on the new forecast form is two
+  to three times too low and ignores the model; the progress bar sits on
+  one stage for most of a forecast; a 4-week forecast is a sliver on a
+  252-week chart; previews of wide tables scroll sideways with no cue; the
+  Iowa datasets in this workspace say a date with no row is unknown, where
+  it should say zero (no effect, the tables are complete; the ingest is
+  corrected for new installs).
+- 19 November 2026. Timings from those tests: pages 0.1 to 0.9 seconds; a
+  forecast of 62 series with an accuracy check 19 seconds; a run again 4 to
+  12 seconds; first open of a Production tab 4 seconds; deleting a forecast
+  9 to 12 seconds.

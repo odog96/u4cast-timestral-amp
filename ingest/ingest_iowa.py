@@ -42,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from iowa_download import DATASET_IDS, download
 from u4cast.frequency import Frequency
 from u4cast.layout import DatasetRecord
+from u4cast.prepare import Fill
 from u4cast.storage import Store, spark_session
 
 if TYPE_CHECKING:
@@ -230,6 +231,8 @@ def dataset_record(cut: Cut, database: str) -> DatasetRecord:
         target_column="bottles",
         dimension_columns=cut.dimensions,
         frequency=cut.frequency,
+        # In order data, a period with no row is a period in which nothing was ordered.
+        fill=Fill.ZERO,
     )
 
 

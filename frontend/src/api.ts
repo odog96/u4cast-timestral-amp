@@ -56,6 +56,7 @@ export interface Source {
 }
 
 export interface Profile extends Source {
+  used_by?: string[];
   date_columns: string[];
   number_columns: string[];
   suggested: { date_column: string | null; target_column: string | null; dimension_columns: string[] };
