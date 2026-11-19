@@ -674,7 +674,7 @@ class FakeScheduler:
         self.jobs[job_id]["paused"] = False
         return job_id
 
-    def pause(self, job_id, paused) -> None:
+    def pause(self, job_id, paused, cron) -> None:
         self.jobs[job_id]["paused"] = paused
 
     def delete(self, job_id) -> None:

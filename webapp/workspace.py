@@ -873,7 +873,7 @@ class Workspace:
             if state == RETIRED:
                 self._drop_job(schedule)
             else:
-                self.scheduler.pause(schedule.job_id, state == PAUSED)
+                self.scheduler.pause(schedule.job_id, state == PAUSED, schedule.cron)
             schedule = schedule.changed(state)
             self.store.save_schedule(schedule)
             self._schedules[(dataset, name)] = schedule

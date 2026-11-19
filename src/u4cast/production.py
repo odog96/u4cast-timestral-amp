@@ -120,7 +120,7 @@ class Scheduler(Protocol):
 
     def create(self, name: str, cron: str, environment: Mapping[str, str]) -> str: ...
 
-    def pause(self, job_id: str, paused: bool) -> None: ...
+    def pause(self, job_id: str, paused: bool, cron: str) -> None: ...
 
     def delete(self, job_id: str) -> None: ...
 
@@ -174,11 +174,19 @@ class ClouderaScheduler:
         logger.info("Created the job %s on the schedule %s", name, cron)
         return job.id
 
-    def pause(self, job_id: str, paused: bool) -> None:
+    def pause(self, job_id: str, paused: bool, cron: str) -> None:
+        """Stop the job from running on its schedule, or give it the schedule `cron` back.
+
+        Cloudera AI's API does not act on a job's `paused` field. Taking the
+        schedule away does stop it, and keeps the job and the list of its runs.
+        """
         import cmlapi
 
         client, project_id = self._client()
-        client.update_job(cmlapi.Job(paused=paused), project_id, job_id)
+        wanted = "" if paused else checked_cron(cron)
+        client.update_job(cmlapi.Job(schedule=wanted), project_id, job_id)
+        if (client.get_job(project_id, job_id).schedule or "") != wanted:
+            raise RuntimeError("Cloudera AI did not change the job's schedule.")
 
     def delete(self, job_id: str) -> None:
         client, project_id = self._client()

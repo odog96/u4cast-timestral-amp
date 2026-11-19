@@ -463,7 +463,9 @@ The following are the details of decision 40, chosen on 19 November 2026.
   earlier, per issue and by how far ahead. It is worked out when looked at
   and not stored. It covers all issues of the forecast, also those made by
   hand before it went into production.
-- **Paused and retired.** Pausing pauses the job. Taking a forecast out of
+- **Paused and retired.** Pausing takes the job's schedule away, and starting
+  it again gives the schedule back. Cloudera AI's API ignores a job's
+  `paused` field, which was found in the proof. Taking a forecast out of
   production deletes the job; its issues and the record of its runs stay.
 - **Actuals are the history table.** Nothing separate is fed in.
 
@@ -1657,3 +1659,16 @@ Claude Code adds dated lines here.
   actuals. The reference shows 108.6% there, because a year earlier those
   weeks fall in the unusual stretch of 2025; it is not a fair yardstick on
   these dates.
+- 19 November 2026. The proof ran to its end. Cloudera AI started both jobs
+  every ten minutes for close to two hours, 11 runs each, all succeeded.
+  The forecast job issued ten times, once for each week that arrived, 300
+  series in 16 to 20 seconds, and on its eleventh run, with no week left to
+  arrive, it issued nothing and wrote "No history after 2026-10-26 has
+  arrived". The table holds 11 issues of the same forecast. Track record
+  over the ten issues with actuals: 20.8% error, and 19.9%, 20.3%, 21.1%
+  and 22.1% at one to four weeks ahead.
+- 19 November 2026. A fault found at the end of the proof: pausing did not
+  stop the job, because Cloudera AI's API ignores the `paused` field. The
+  job ran once more after the application showed it as paused. Pause now
+  takes the schedule away, and checks that it is gone. Both proof jobs are
+  stopped this way and are still in the Jobs page.
