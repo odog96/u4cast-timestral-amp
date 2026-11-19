@@ -616,6 +616,18 @@ reports accuracy.
   Oliver asks for a model comparison.
 - **Unequal history lengths in one dataset.** Deferred by decision 8. Comes
   back if real datasets fail the equal-length rule too often.
+- **Reading a table through a virtual warehouse.** Oliver, 19 November 2026:
+  put it on the list for a future release. Today a table is found through
+  any data connection and read with Spark. A table Spark cannot read, such
+  as a Hive managed table, would be listed and then fail to open; that case
+  was not tested. Comes back when a user has such tables.
+- **A size check when a table is picked.** Oliver, 19 November 2026: when a
+  user selects a table, check that it is not enormous and say so, in a
+  future release. What exists today is later in the flow: a forecast is
+  refused above 5 million rows of history or 25,000 series, before the rows
+  are loaded. Picking a table already counts its rows, which on a very
+  large table is itself slow; the check would have to come before that,
+  from the table's own statistics.
 
 ## What is known about Timestral, and from where
 
@@ -1573,3 +1585,6 @@ Claude Code adds dated lines here.
   model": 17.9% against 37.2% for the reference. The 209M example beside it
   shows 19.4%, from past dates four weeks earlier, so the two figures are
   not a like-for-like comparison of the models.
+- 19 November 2026. Oliver put two things on the list for a future release:
+  reading a table through a virtual warehouse when Spark cannot read it, and
+  a size check when a table is picked. Both are under "Deferred items".
