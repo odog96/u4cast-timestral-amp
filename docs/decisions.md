@@ -507,10 +507,7 @@ The following are the details of decision 41, chosen on 19 November 2026.
   still says issue in places; the screens and the documents do not.
 - **Moving what was stored.** `tools/move_to_table_per_forecast.py` copied
   the 86 stored runs to their new tables: 207,159 rows before and after.
-  The three old tables, `forecast_values_iowa_liquor_sales_monthly`,
-  `forecast_values_iowa_liquor_sales_weekly` and
-  `forecast_values_weekly_sales_arriving`, are no longer read. They are
-  still in the database: dropping them is Oliver's call.
+  The three old tables were dropped on 19 November 2026, on Oliver's word.
 - **Clean-up.** The screen lists each forecast that is not in production
   with its last run, age, runs, tables, rows and size, oldest first. The
   size comes from Iceberg's own list of a table's files. Deleting drops the
@@ -1798,3 +1795,12 @@ Claude Code adds dated lines here.
   "u4cast-amp-test - ozarate 1" with its model, application and job, and the
   database `u4cast_amptest`. Whether to keep or remove them is Oliver's
   call.
+- 19 November 2026. Cleared up after the tests, on Oliver's word. Removed the
+  test project with its model, application and job, and an empty project
+  that a first, failed attempt to create it had left behind. Dropped the
+  database `u4cast_amptest`. Dropped the three tables of the old layout,
+  `forecast_values_iowa_liquor_sales_monthly`,
+  `forecast_values_iowa_liquor_sales_weekly` and
+  `forecast_values_weekly_sales_arriving`, after checking once more that
+  all 86 runs in them are in the new tables. The application reads its
+  forecasts as before.
