@@ -162,7 +162,8 @@ export function LineChart({
 
   const setFromPointer = (event: React.PointerEvent) => {
     const box = event.currentTarget.getBoundingClientRect();
-    const index = Math.round(x.invert(event.clientX - box.left));
+    // The rectangle that catches the pointer starts at the left margin, where the scale starts.
+    const index = Math.round(x.invert(event.clientX - box.left + MARGIN.left));
     setHover(Math.max(0, Math.min(dates.length - 1, index)));
   };
 

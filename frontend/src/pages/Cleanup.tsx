@@ -145,7 +145,7 @@ export function CleanupPage() {
                               remove.mutate(row);
                           }}
                         >
-                          Delete
+                          {remove.isPending && remove.variables === row ? "Deleting…" : "Delete"}
                         </button>
                       </td>
                     </tr>

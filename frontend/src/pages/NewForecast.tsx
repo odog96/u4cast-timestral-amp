@@ -75,7 +75,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
       history_end: end,
       minimum_history: shortHistory ? dataset.minimum_history_floor : null,
       target_column: target,
-      horizon: Math.max(1, horizon || 1),
+      horizon: Number.isInteger(horizon) ? Math.min(1024, Math.max(1, horizon)) : 1,
       cutoffs: check ? Math.max(0, cutoffs || 0) : 0,
       cutoff_step: Math.max(1, step || 1),
     }),
@@ -112,6 +112,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
   for (let n = 2; taken.has(suggested); n += 1) suggested = `${base} (${n})`;
   const chosenName = forecastName.trim() || suggested;
 
+  const horizonOk = Number.isInteger(horizon) && horizon >= 1 && horizon <= 1024;
   const data = summary.data;
   const stale = summary.isFetching || settled !== request;
   const toggleDimension = (column: string) =>
@@ -281,7 +282,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
                 min={1}
                 max={1024}
                 aria-label={`${unit(frequency)} ahead`}
-                value={horizon || ""}
+                value={Number.isNaN(horizon) ? "" : horizon}
                 onChange={(event) => setHorizon(Number(event.target.value))}
               />
               <span className="muted">{unit(frequency, horizon)}</span>
@@ -297,6 +298,11 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
                 ))}
               </div>
             </div>
+            {!horizonOk && (
+              <div className="notice warning" style={{ marginTop: 12 }}>
+                Enter a whole number of {unit(frequency)} from 1 to 1,024.
+              </div>
+            )}
           </div>
 
           <div className="form-section">
@@ -426,7 +432,6 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
                     {(models.data ?? []).map((choice) => (
                       <option key={choice.key} value={choice.key}>
                         {modelName(choice.model_name)}
-                        {choice.key !== modelName(choice.model_name) ? ` (${choice.key})` : ""}
                       </option>
                     ))}
                   </select>
@@ -448,7 +453,7 @@ function Builder({ dataset }: { dataset: DatasetOverview }) {
                 </div>
                 <button
                   className="btn primary large block"
-                  disabled={!data || data.series === 0 || stale || create.isPending}
+                  disabled={!horizonOk || !data || data.series === 0 || stale || create.isPending}
                   onClick={() => create.mutate()}
                 >
                   Create forecast

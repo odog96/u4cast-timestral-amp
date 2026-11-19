@@ -1,6 +1,6 @@
 // Explore a forecast: its chart, its runs side by side, its accuracy, and its stored rows.
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -73,6 +73,7 @@ export function ForecastPage() {
 
 function Explore({ overview }: { overview: ForecastOverview }) {
   const [params, setParams] = useSearchParams();
+  const client = useQueryClient();
   const frequency = overview.dataset.frequency;
   const issue = overview.issues.find((i) => i.forecast_id === params.get("issue")) ?? overview.issues[0];
   const tab = (params.get("tab") as Tab) || "forecast";
@@ -128,7 +129,10 @@ function Explore({ overview }: { overview: ForecastOverview }) {
         <Reissue
           overview={overview}
           onClose={() => setReissuing(false)}
-          onDone={(forecastId) => {
+          onDone={async (forecastId) => {
+            // Read the list of runs again before showing the new one, so the page
+            // never shows the new run's address with the old run's numbers.
+            await client.invalidateQueries({ queryKey: ["forecast", overview.dataset.name] });
             setReissuing(false);
             update({ issue: forecastId });
           }}
@@ -392,7 +396,9 @@ function ForecastTab({
                 Drill down by any of these.{" "}
                 {selected
                   ? "Showing one series"
-                  : `${options.data.series.toLocaleString()} series added together`}
+                  : options.data.series === 1
+                    ? "Showing one series"
+                    : `${options.data.series.toLocaleString()} series added together`}
               </span>
               {(Object.keys(drill).length > 0 || selected) && (
                 <button
@@ -422,7 +428,9 @@ function ForecastTab({
             subtitle={
               selected
                 ? splitLabel(data.label).rest || `${data.target} by ${unit(frequency, 1)}`
-                : `${data.target} by ${unit(frequency, 1)}, all series added together`
+                : data.series === 1
+                  ? `${data.target} by ${unit(frequency, 1)}`
+                  : `${data.target} by ${unit(frequency, 1)}, ${data.series.toLocaleString()} series added together`
             }
             actions={<SeriesPicker forecastId={issue.forecast_id} selected={selected} onSelect={onSelect} />}
             dates={built.dates}
@@ -612,7 +620,7 @@ function Comparison({
         title={selected ? main : data.label}
         subtitle={
           kind === "forecast"
-            ? `${selected && rest ? `${rest}. ` : ""}Each line is one issue, named by where its history ended.`
+            ? `${selected && rest ? `${rest}. ` : ""}Each line is one run, named by where its history ended.`
             : `${selected && rest ? `${rest}. ` : ""}Each line is the forecast made from one past date.`
         }
         actions={<SeriesPicker forecastId={pickerFor} selected={selected} onSelect={onSelect} />}
@@ -987,7 +995,7 @@ function StoredTab({ issue, frequency }: { issue: ForecastRecord; frequency: Fre
             <dd>
               {period(issue.history_start_date, frequency)} to {period(issue.history_end_date, frequency)}
             </dd>
-            <dt>One series per</dt>
+            <dt>Dimension list</dt>
             <dd>{issue.dimension_columns.join(", ") || "everything added together"}</dd>
             <dt>Filter</dt>
             <dd>
