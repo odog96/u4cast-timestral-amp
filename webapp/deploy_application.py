@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 
@@ -92,21 +93,33 @@ def main() -> None:
         client.restart_application(project_id, application.id)
     else:
         logger.info("Creating the application %s on %s with %s", name, runtime, needed)
-        application = client.create_application(
-            cmlapi.CreateApplicationRequest(
-                project_id=project_id,
-                name=name,
-                subdomain=name,
-                description="Forecast many time series at once with Timestral.",
-                script=SCRIPT,
-                kernel="python3",
-                cpu=cpu,
-                memory=memory,
-                runtime_identifier=runtime,
-                runtime_addon_identifiers=needed,
-            ),
-            project_id,
-        )
+        # An address is used once in a workbench. If another project already runs
+        # this application as "u4cast", this one adds its own project's name.
+        project = re.sub(r"[^a-z0-9]+", "-", os.environ.get("CDSW_PROJECT", "").lower()).strip("-")
+        application = None
+        for subdomain in dict.fromkeys([name, f"{name}-{project}" if project else name]):
+            try:
+                application = client.create_application(
+                    cmlapi.CreateApplicationRequest(
+                        project_id=project_id,
+                        name=name,
+                        subdomain=subdomain,
+                        description="Forecast many time series at once with Timestral.",
+                        script=SCRIPT,
+                        kernel="python3",
+                        cpu=cpu,
+                        memory=memory,
+                        runtime_identifier=runtime,
+                        runtime_addon_identifiers=needed,
+                    ),
+                    project_id,
+                )
+                break
+            except cmlapi.rest.ApiException as error:
+                logger.info("The address %s could not be used: %s", subdomain, error.reason)
+                failure = error
+        if application is None:
+            raise failure
 
     started = time.monotonic()
     last = None
