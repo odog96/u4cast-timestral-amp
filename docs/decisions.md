@@ -1588,3 +1588,12 @@ Claude Code adds dated lines here.
 - 19 November 2026. Oliver put two things on the list for a future release:
   reading a table through a virtual warehouse when Spark cannot read it, and
   a size check when a table is picked. Both are under "Deferred items".
+- 19 November 2026. Added a quick start, `notebooks/timestral_quickstart.ipynb`,
+  and a README section "New to Timestral? Start here" that points to it.
+  Oliver asked for it: one series sent to Timestral, to show the request and
+  the answer and that the request holds no dates. It takes one series from
+  `docs/sample-sales.csv` and calls the workbench model endpoint with plain
+  HTTP, using only what a plain session has (pandas, matplotlib, urllib). It
+  reads the model's access key and the caller's key from the environment and
+  prints neither. It was run top to bottom in a session and passed. It is
+  committed without outputs, because of rule 4.

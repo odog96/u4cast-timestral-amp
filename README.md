@@ -9,6 +9,13 @@ application does the bookkeeping that is hard to do by hand at that volume:
 which forecast was issued when, which prediction belongs to which date and
 which series, and how each forecast compared with what actually happened.
 
+## New to Timestral? Start here
+
+`notebooks/timestral_quickstart.ipynb` sends one series of sales to Timestral
+and shows exactly what goes to the model and what comes back. The request is
+numbers only: there is not a single date in it. Open it in a session of the
+installed project and run it top to bottom. It takes about two minutes.
+
 ## Read this first
 
 - **This is a reference example.** It is not something Cloudera runs in
@@ -109,6 +116,7 @@ writes to a table of history.
 | `serving/` | The function Cloudera AI serves as the model endpoint, and the script that deploys it. |
 | `ingest/` | The demo data download and the Spark ingest. |
 | `amp/` | The six install steps. |
+| `notebooks/` | The quick start: one series sent to Timestral, step by step. |
 | `docs/decisions.md` | Why each thing is the way it is, with every measurement. |
 | `docs/test-drive.md` | A walk through every screen, with what you should see at each step. `docs/sample-sales.csv` is a made-up file for trying the CSV upload. |
 
