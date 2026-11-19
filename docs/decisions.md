@@ -256,6 +256,30 @@ Decision 40 was made by Oliver on 19 November 2026 in a Claude Code session.
     and vanished ones leave; it keeps its model and fails if that model is
     gone; and it can be paused and retired.
 
+Decision 41 was made by Oliver on 19 November 2026 in a Claude Code session.
+
+41. **The words are dataset, forecast and run; every forecast has its own
+    table; and forecasts that are not in production can be deleted.**
+    - A **forecast** is a named configuration on a dataset: the number to
+      forecast, the dimension list, the filter, the horizon, the model.
+      Oliver: "I'm tempted to use forecast to mean forecast configuration.
+      A forecast can have a name. We should be able to have many forecasts
+      per dataset."
+    - A **run** is one execution of a forecast at a point in time, with its
+      own identifier. "Let's not use issue or reissue." Running a forecast
+      when no history has arrived would repeat the last run, and is refused.
+    - A **test run** is a run from a past date, made by the accuracy check.
+      The term is Claude's.
+    - **One table per forecast.** Oliver: "Many forecasts to one table?
+      Don't you think that would get complicated?" With one table per
+      dataset, forecasts at different levels, horizons and numbers shared
+      columns, and a reader had to filter by identifier every time.
+    - **Clean-up.** Oliver: "have a clean up table for forecast tables, by
+      age and size, and the user can delete those. You would only show
+      those not put into production." With a note on the main page and a
+      separate screen. This answers open question 13 for forecasts. Nothing
+      else in the application deletes.
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -469,6 +493,32 @@ The following are the details of decision 40, chosen on 19 November 2026.
   production deletes the job; its issues and the record of its runs stay.
 - **Actuals are the history table.** Nothing separate is fed in.
 
+The following are the details of decision 41, chosen on 19 November 2026.
+
+- **Table names.** `forecast_values_<dataset>__<forecast>` holds every run
+  of a forecast, with only the dimension columns that forecast is made by.
+  Its test runs go to `forecast_values_<dataset>__<forecast>__test_runs`,
+  so the first table holds real runs only. A new forecast whose name would
+  give the table of another one is refused.
+- **Names in storage are unchanged.** The list of runs is still the table
+  `forecasts`, with the columns `forecast_id` (the run's identifier),
+  `forecast_name` and `kind` (`forecast` for a run, `backtest` for a test
+  run). Renaming them would have broken stored rows and queries. The code
+  still says issue in places; the screens and the documents do not.
+- **Moving what was stored.** `tools/move_to_table_per_forecast.py` copied
+  the 86 stored runs to their new tables: 207,159 rows before and after.
+  The three old tables, `forecast_values_iowa_liquor_sales_monthly`,
+  `forecast_values_iowa_liquor_sales_weekly` and
+  `forecast_values_weekly_sales_arriving`, are no longer read. They are
+  still in the database: dropping them is Oliver's call.
+- **Clean-up.** The screen lists each forecast that is not in production
+  with its last run, age, runs, tables, rows and size, oldest first. The
+  size comes from Iceberg's own list of a table's files. Deleting drops the
+  forecast's tables and removes its runs from `forecasts` and
+  `production_runs`. A forecast in production, running or paused, is not
+  listed and cannot be deleted until it is taken out.
+- **Datasets cannot be deleted.** Oliver asked for forecasts only.
+
 The following follow from decision 36 and were chosen on 18 November 2026.
 
 - **The demo tables.** The ingest writes two, and keeps only the series that
@@ -595,8 +645,9 @@ the application on 18 November 2026.
     in either direction. Claude's recommendation: yes, as part of the
     deferred "Anomaly adjustment", after the demo. For the demo, show the
     weekly SKU examples, where the result does not depend on it.
-13. **Should a dataset or a forecast be deletable?** The 2022 dashboard had
-    Delete on both. Here nothing is ever overwritten, and there is no
+13. **Should a dataset or a forecast be deletable?** Answered for forecasts
+    by decision 41: yes, when not in production. Open for datasets. The
+    2022 dashboard had Delete on both. Here nothing is ever overwritten, and there is no
     delete. Claude's recommendation: yes for both, after the demo. Deleting
     a dataset would remove it from the list and leave its table alone;
     deleting a forecast would remove its rows from Iceberg.
@@ -1672,3 +1723,12 @@ Claude Code adds dated lines here.
   job ran once more after the application showed it as paused. Pause now
   takes the schedule away, and checks that it is gone. Both proof jobs are
   stopped this way and are still in the Jobs page.
+- 19 November 2026. Decision 41 built. The screens and documents say
+  forecast, run, run again and test run. Every forecast has its own table.
+  A clean-up screen deletes forecasts that are not in production. Checked
+  on the live application: stored forecasts read from their new tables
+  with the same figures as before, a throwaway forecast with two test runs
+  was made and deleted, and deleting the forecast in production was
+  refused.
+- 19 November 2026. Open for Oliver: drop the three tables of the old
+  layout, which are copied and no longer read.

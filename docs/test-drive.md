@@ -54,7 +54,7 @@ every forecast made from it. Open **SKUs, 4 weeks ahead**.
    **Find one series** does the same by search: type `fireball`.
 4. Below the chart, the list of series can be searched and sorted. Click a
    row to chart it.
-5. The picker at the top right, "History to ...", switches between the issues
+5. The picker at the top right, "History to ...", switches between the runs
    of this forecast. Pick the older one: the chart now also shows the
    actuals that arrived after it was made, next to what it predicted.
 
@@ -62,21 +62,21 @@ One thing that looks odd and is not a fault: the tile "The same weeks a year
 earlier" can show the forecast 30% below last year. Last year's weeks fall
 in the unusual stretch of 2025.
 
-## 3. Reissue (1 minute)
+## 3. Run it again (1 minute)
 
-1. Click **Reissue**. "With history to" offers the latest data, 26 October
-   2026. Click the black **Reissue** button.
-2. A progress bar runs for well under a minute, then the new issue opens.
-3. The tab **Issues compared** now counts 3, where it counted 2.
+1. Click **Run again**. "With history to" offers the latest data, 26 October
+   2026. Click the black **Run again** button.
+2. A progress bar runs for well under a minute, then the new run opens.
+3. The tab **Runs compared** now counts 3, where it counted 2.
 
 What this shows: the same 300 series were forecast again from a later date,
-under a new identifier, and the earlier issues are untouched.
+under a new identifier, and the earlier runs are untouched.
 
-## 4. Issues compared (2 minutes)
+## 4. Runs compared (2 minutes)
 
-Open the tab **Issues compared**. For each date that several issues
-predicted, you see each issue's prediction side by side with what actually
-happened, as a chart and as a table. Up to the 5 newest issues are shown.
+Open the tab **Runs compared**. For each date that several runs
+predicted, you see each run's prediction side by side with what actually
+happened, as a chart and as a table. Up to the 5 newest runs are shown.
 Pick one series to see the same for a single SKU.
 
 ## 5. Accuracy (3 minutes)
@@ -101,16 +101,16 @@ dates left out, this level scores 18.2% against 24.4%. The tables are in
 Open the tab **Stored rows**.
 
 1. It names the two Iceberg tables: the values table,
-   `u4cast.forecast_values_iowa_liquor_sales_weekly`, and the forecasts
+   `u4cast.forecast_values_iowa_liquor_sales_weekly__skus_4_weeks_ahead`, and the forecasts
    table, `u4cast.forecasts`.
-2. "Every issue of this forecast, one row each" lists the issues with their
-   identifiers. Each issue of this forecast has 1,200 rows: 300 series by 4
+2. "Every run of this forecast, one row each" lists the runs with their
+   identifiers. Each run of this forecast has 1,200 rows: 300 series by 4
    weeks.
 3. **Copy SQL** copies a query. Paste it into Hue, or any SQL editor on the
    data lake, and run it. You should get the same rows the screen shows.
    This is the check that the forecasts are in Iceberg and not only in the
    application.
-4. **CSV**, top right, downloads the issue you are looking at: 1,200 rows
+4. **CSV**, top right, downloads the run you are looking at: 1,200 rows
    and a header.
 
 ## 7. A forecast of your own (5 minutes)
@@ -128,7 +128,7 @@ once. The steps below change some of them.
 3. **Only these**: under `county` choose `LINN`. The panel on the right now
    says the forecast covers 569 series.
 4. **History to use**: leave "From" alone. Under "To" choose July 2026, so
-   that later months are left to reissue. The panel says 55 months of
+   that later months are left to run it again with. The panel says 55 months of
    history.
 5. **How far ahead**: 3 months.
 6. **Check accuracy on the past**: leave it on, from 4 past dates, 3 months
@@ -138,8 +138,8 @@ once. The steps below change some of them.
    workbench: Timestral-209M, and the smaller ones if they were deployed. A name is offered; change it if you like. Click **Create
    forecast**. It
    takes about half a minute and then opens.
-8. Reissue it with history to August 2026, then September 2026. Open
-   **Issues compared**: three issues predicted October 2026, and the actual
+8. Run it again with history to August 2026, then September 2026. Open
+   **Runs compared**: three runs predicted October 2026, and the actual
    is next to them.
 
 To see a summed-up forecast, make another with only `category` on in the
@@ -166,11 +166,11 @@ replaces a table.
 ## 9. Things it should refuse (2 minutes)
 
 - Create a forecast with a name that is already used in the dataset. It
-  says a forecast of that name exists, and to open it to reissue it.
+  says a forecast of that name exists, and to open it to run it again.
 - In **New forecast** on the monthly dataset, set "From" to a date in 2025.
   The count of series drops to zero, because a monthly series needs 24
   months of history.
-- Start a reissue while a forecast is running. It waits its turn: the
+- Start a run while a forecast is running. It waits its turn: the
   application runs one job at a time.
 
 ## 10. The automated tests (1 minute)
@@ -181,7 +181,7 @@ In a session terminal, in the project folder:
 .venv/bin/pytest
 ```
 
-Expected: 161 passed, 12 skipped. The 12 need Spark or the model weights and
+Expected: 171 passed, 12 skipped. The 12 need Spark or the model weights and
 are skipped unless asked for; the README says how.
 
 ## What to expect that is not a fault

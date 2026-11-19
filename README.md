@@ -6,7 +6,7 @@ It runs inside Cloudera AI and installs itself as an AMP.
 
 It is made for a demand forecasting team that does not write code. The
 application does the bookkeeping that is hard to do by hand at that volume:
-which forecast was issued when, which prediction belongs to which date and
+which forecast was run when, which prediction belongs to which date and
 which series, and how each forecast compared with what actually happened.
 
 ## New to Timestral? Start here
@@ -41,14 +41,14 @@ The code of this project is licensed under Apache 2.0; see `LICENSE`.
    together. The result is appended to an Iceberg table.
 4. **Explore.** A chart of history, forecast and range, for the total or for
    one series found by search.
-5. **Reissue.** Forecast the same series again from a later date. Every issue
-   is kept, and the issues are shown side by side with what happened.
+5. **Run again.** Run the same forecast from a later date. Every run is
+   kept, and the runs are shown side by side with what happened.
 6. **Check accuracy.** The forecast is made again from past dates and scored
    against the actuals, per series, worst first.
 7. **Download** any forecast as CSV, or query it with SQL.
-8. **Put a forecast in production.** A Cloudera AI job then issues it again
-   on a schedule, from the history as it stands that day. Each run is a new
-   issue in the same table, and each issue is scored against the actuals
+8. **Put a forecast in production.** A Cloudera AI job then runs it again
+   on a schedule, from the history as it stands that day. Each run is added
+   to the forecast's own table, and each run is scored against the actuals
    as they arrive.
 
 ## Install
@@ -103,8 +103,8 @@ Everything is in Iceberg tables in one database:
 
 | Table | One row per |
 | --- | --- |
-| `forecast_values_<dataset>` | forecast, series and future date |
-| `forecasts` | forecast: its name, slice, history dates, horizon, model |
+| `forecast_values_<dataset>__<forecast>` | run, series and future date; one table per forecast |
+| `forecasts` | run of a forecast: its name, slice, history dates, horizon, model |
 | `datasets` | saved dataset |
 
 New forecasts are appended. Nothing is overwritten, and the application never
@@ -120,7 +120,7 @@ writes to a table of history.
 | `serving/` | The function Cloudera AI serves as the model endpoint, and the script that deploys it. |
 | `ingest/` | The demo data download and the Spark ingest. |
 | `amp/` | The six install steps. |
-| `production/` | The job that issues a forecast in production, and a growing table to try it on. |
+| `production/` | The job that runs a forecast in production, and a growing table to try it on. |
 | `notebooks/` | The quick start: one series sent to Timestral, step by step. |
 | `docs/decisions.md` | Why each thing is the way it is, with every measurement. |
 | `docs/test-drive.md` | A walk through every screen, with what you should see at each step. `docs/sample-sales.csv` is a made-up file for trying the CSV upload. |

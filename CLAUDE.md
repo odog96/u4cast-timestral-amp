@@ -150,22 +150,25 @@ are in this file, which loads with this one:
 Everything is stored in Iceberg tables. History and forecasts are in separate
 tables. The application never writes to a history table.
 
-- **Forecast values table**, one per dataset. One row per forecast, series and
-  future date. Columns: `forecast_id`, `ts_id`, the dataset's dimension
+- **Forecast values table**, one per forecast. A forecast is a named
+  configuration on a dataset: the number to forecast, the dimension list, the
+  filter, the horizon and the model. One row per run, series and future
+  date. Columns: `forecast_id` (the run), `ts_id`, the forecast's dimension
   columns, `date`, `forecast`, `low`, `high`, and `step` (how many periods
-  after the end of history the row is). New forecasts are appended. Nothing is
-  overwritten.
-- **Forecasts table.** One row per forecast: `forecast_id`, `forecast_name`,
+  after the end of history the row is). Every run of the forecast is
+  appended. Nothing is overwritten. Test runs go to a second table. Decision
+  41 in `docs/decisions.md` gives the reasons.
+- **Forecasts table.** One row per run: `forecast_id`, `forecast_name`,
   the dataset, target column, dimension columns, the filter that defines the
   slice, frequency, the first and last date of history used
   (`history_start_date`, `history_end_date`), horizon, model name, `kind`,
-  creation time, and what a date with no row became. Reissuing a forecast
-  reuses its filter.
+  creation time, and what a date with no row became. Running a forecast
+  again reuses its filter.
 - **Datasets table.** One row per saved dataset: name, source table, column
   roles, frequency, and what a date with no row means.
-- Reissuing a forecast creates a new `forecast_id` under the same
+- Running a forecast again creates a new `forecast_id` under the same
   `forecast_name`. Example: 100 SKUs forecast monthly for the next 12 months
-  gives 1,200 rows per issue. The issues of January, February and March each
+  gives 1,200 rows per run. The runs of January, February and March each
   hold a row for June. `forecast_id` and `history_end_date` tell them apart.
 - CSV download of any forecast is an extra option, not the main output.
 
