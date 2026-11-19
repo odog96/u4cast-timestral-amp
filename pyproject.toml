@@ -75,3 +75,5 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["ANN"]
+# A teaching notebook prints what it shows; that is its purpose.
+"notebooks/**" = ["T201", "ANN"]
