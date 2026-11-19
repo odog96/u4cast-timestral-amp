@@ -235,6 +235,27 @@ Decision 39 was made by Oliver on 19 November 2026 in a Claude Code session.
     choice is called "Forecasting model", after "forecasting technique" in
     the 2022 application.
 
+Decision 40 was made by Oliver on 19 November 2026 in a Claude Code session.
+
+40. **A forecast can be put in production: a Cloudera AI job issues it again
+    on a schedule.** Oliver: "Each dataset can have multiple forecasts, so
+    this is the exploratory forecasting phase. At a certain point they're
+    going to pick a forecast that they like, but then they want to put it
+    into production, so this means a regular forecast." His points:
+    - every run lands in the same forecast table as new rows, each run with
+      its own identifier;
+    - the new data arrives in the original history table, refreshed by the
+      owner; the forecast reads that table;
+    - as actuals arrive they are compared with the forecasts and give
+      metrics;
+    - the periodic forecast is a Cloudera AI job, one job per forecast;
+    - prove that it works, on a compressed clock.
+    He agreed to five things Claude raised: a run with no new data makes
+    nothing and says the data is late; the job does not depend on the
+    application being open; the forecast is a filter, so new products join
+    and vanished ones leave; it keeps its model and fails if that model is
+    gone; and it can be paused and retired.
+
 ## Proposed by Claude, not yet confirmed by Oliver
 
 - How a slice is selected: the user filters on dimension values and picks a
@@ -421,6 +442,30 @@ The following are the details of decision 39, chosen on 19 November 2026.
 - **One image, any size.** A replica is told which model to serve by an
   environment variable and downloads weights the image does not hold when
   it starts.
+
+The following are the details of decision 40, chosen on 19 November 2026.
+
+- **What "in production" is.** A row in a new table, `schedules`, and a
+  Cloudera AI job named "u4cast production: <forecast> (<dataset>)" with a
+  cron schedule in UTC, 2 vCPU and 8 GB, and the Spark and Hadoop add-ons.
+  The Production tab of a forecast offers schedules that fit the dataset's
+  frequency, and takes any cron schedule.
+- **What a run does.** `production/run_forecast.py` reads the history as it
+  stands and reissues the forecast: same slice, same horizon, same model. It
+  writes straight to Iceberg and does not go through the application.
+- **Every run is written down** in a new table, `production_runs`: issued,
+  no new data, or failed, with the reason. A failed run ends the job as
+  failed, so Cloudera AI's own alerts apply.
+- **The application reads its lists again every 20 seconds,** to find issues
+  a job wrote.
+- **The track record.** Every issue of a forecast is scored on the dates it
+  predicted that now have an actual, against repeating the value of a year
+  earlier, per issue and by how far ahead. It is worked out when looked at
+  and not stored. It covers all issues of the forecast, also those made by
+  hand before it went into production.
+- **Paused and retired.** Pausing pauses the job. Taking a forecast out of
+  production deletes the job; its issues and the record of its runs stay.
+- **Actuals are the history table.** Nothing separate is fed in.
 
 The following follow from decision 36 and were chosen on 18 November 2026.
 

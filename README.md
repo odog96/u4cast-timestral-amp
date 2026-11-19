@@ -46,6 +46,10 @@ The code of this project is licensed under Apache 2.0; see `LICENSE`.
 6. **Check accuracy.** The forecast is made again from past dates and scored
    against the actuals, per series, worst first.
 7. **Download** any forecast as CSV, or query it with SQL.
+8. **Put a forecast in production.** A Cloudera AI job then issues it again
+   on a schedule, from the history as it stands that day. Each run is a new
+   issue in the same table, and each issue is scored against the actuals
+   as they arrive.
 
 ## Install
 
@@ -116,6 +120,7 @@ writes to a table of history.
 | `serving/` | The function Cloudera AI serves as the model endpoint, and the script that deploys it. |
 | `ingest/` | The demo data download and the Spark ingest. |
 | `amp/` | The six install steps. |
+| `production/` | The job that issues a forecast in production, and a growing table to try it on. |
 | `notebooks/` | The quick start: one series sent to Timestral, step by step. |
 | `docs/decisions.md` | Why each thing is the way it is, with every measurement. |
 | `docs/test-drive.md` | A walk through every screen, with what you should see at each step. `docs/sample-sales.csv` is a made-up file for trying the CSV upload. |

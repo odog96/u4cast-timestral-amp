@@ -185,5 +185,7 @@ class ClouderaScheduler:
         client.delete_job(project_id, job_id)
 
     def address(self, job_id: str) -> str | None:
-        project = os.environ.get("CDSW_PROJECT_URL")
+        # CDSW_PROJECT_URL is the project's address in the API. The Jobs page is
+        # at the same owner and project name, without the API part.
+        project = os.environ.get("CDSW_PROJECT_URL", "").replace("/api/v1/projects/", "/")
         return f"{project}/jobs" if project else None
