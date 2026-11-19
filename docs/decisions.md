@@ -1555,3 +1555,14 @@ Claude Code adds dated lines here.
   of every forecast ahead of time when it starts. He asked whether a larger
   application would help: no, the time is one Spark read, not a shortage of
   memory or processors. Open question 8 (pyarrow) is the lever.
+- 19 November 2026. Decision 39. Adding a dataset browses the project's
+  data connections: connection, database, table. Tested in this workspace:
+  8 connections, 36 databases, listed through an Impala and a Hive virtual
+  warehouse in under 3 seconds and through Spark. The new forecast screen
+  has "Forecasting model", which lists the deployed workbench models.
+- 19 November 2026. The first build of a model image hangs in "pushing".
+  It happened on 17 November and twice more today; each time the next
+  build of the same code finished in 10 to 15 seconds. The deploy script
+  now gives a build 12 minutes and then starts another, up to three.
+- 19 November 2026. A script run as a Cloudera AI job has no `__file__`.
+  The job scripts find the project folder from the working directory.

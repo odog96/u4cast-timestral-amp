@@ -36,7 +36,8 @@ MODEL_FILE = "serving/workbench_model.py"
 MODEL_FUNCTION = "forecast"
 ACCESS_KEY_VARIABLE = "U4CAST_MODEL_ACCESS_KEY"
 POLL_SECONDS = 15
-BUILD_TIMEOUT_SECONDS = 45 * 60
+BUILD_TIMEOUT_SECONDS = 12 * 60
+BUILD_ATTEMPTS = 3
 DEPLOY_TIMEOUT_SECONDS = 20 * 60
 
 
@@ -111,27 +112,37 @@ def deploy(
 
     model = find_or_create_model(client, project_id, name, serves)
 
-    logger.info("Building %s for %s on %s", MODEL_FILE, name, runtime)
-    build = client.create_model_build(
-        cmlapi.CreateModelBuildRequest(
-            project_id=project_id,
-            model_id=model.id,
-            comment="Built by serving/deploy_workbench_model.py",
-            file_path=MODEL_FILE,
-            function_name=MODEL_FUNCTION,
-            kernel="python3",
-            runtime_identifier=runtime,
-        ),
-        project_id,
-        model.id,
-    )
-    wait_for(
-        "Model build",
-        lambda: client.get_model_build(project_id, model.id, build.id).status,
-        done="built",
-        failed=("build failed", "failed"),
-        timeout=BUILD_TIMEOUT_SECONDS,
-    )
+    build = None
+    for attempt in range(1, BUILD_ATTEMPTS + 1):
+        logger.info("Building %s for %s on %s, attempt %d", MODEL_FILE, name, runtime, attempt)
+        build = client.create_model_build(
+            cmlapi.CreateModelBuildRequest(
+                project_id=project_id,
+                model_id=model.id,
+                comment="Built by serving/deploy_workbench_model.py",
+                file_path=MODEL_FILE,
+                function_name=MODEL_FUNCTION,
+                kernel="python3",
+                runtime_identifier=runtime,
+            ),
+            project_id,
+            model.id,
+        )
+        try:
+            wait_for(
+                "Model build",
+                lambda build=build: client.get_model_build(project_id, model.id, build.id).status,
+                done="built",
+                failed=("build failed", "failed"),
+                timeout=BUILD_TIMEOUT_SECONDS,
+            )
+            break
+        except TimeoutError:
+            # A build can hang while its image is uploaded ("pushing"). The image
+            # is stored all the same, and a second build then finishes at once.
+            if attempt == BUILD_ATTEMPTS:
+                raise
+            logger.info("The build hung. Starting another one.")
 
     deployment = client.create_model_deployment(
         cmlapi.CreateModelDeploymentRequest(
