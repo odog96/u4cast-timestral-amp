@@ -101,12 +101,29 @@ def values_table_schema(dimension_columns: Sequence[str]) -> list[tuple[str, str
     ]
 
 
-def forecast_values_table(dataset: str) -> str:
-    """Return the name of the forecast values table of a dataset."""
-    slug = re.sub(r"[^a-z0-9]+", "_", dataset.lower()).strip("_")
+def _slug(name: str, what: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     if not slug:
-        raise ValueError(f"The dataset name {dataset!r} has no letter or digit to name a table by.")
-    return f"forecast_values_{slug}"
+        raise ValueError(f"The {what} name {name!r} has no letter or digit to name a table by.")
+    return slug
+
+
+def forecast_values_table(dataset: str) -> str:
+    """Return the name the one forecast values table of a dataset had before each
+    forecast got its own. It is also the start of the names of those tables."""
+    return f"forecast_values_{_slug(dataset, 'dataset')}"
+
+
+def forecast_table(dataset: str, forecast_name: str, kind: Kind | None = None) -> str:
+    """Return the name of the table that holds the runs of one forecast.
+
+    Every forecast has its own table, so all rows of a table are at the same
+    level of detail, over the same horizon and of the same number. The test
+    runs of the accuracy check go to a second table, so that the first holds
+    real runs only.
+    """
+    name = f"{forecast_values_table(dataset)}__{_slug(forecast_name, 'forecast')}"
+    return f"{name}__test_runs" if kind is Kind.BACKTEST else name
 
 
 def _utc(value: Any) -> dt.datetime:

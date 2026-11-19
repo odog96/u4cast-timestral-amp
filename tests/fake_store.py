@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 
 from u4cast.forecast import IssuedForecast
-from u4cast.layout import DatasetRecord, ForecastRecord, Kind
+from u4cast.layout import DatasetRecord, ForecastRecord, Kind, forecast_table
 
 TYPES = {"M": "date", "O": "string", "f": "double", "i": "bigint", "b": "boolean"}
 
@@ -25,6 +25,7 @@ class FakeStore:
         self.loads = 0
         self.saved_schedules: dict = {}
         self.saved_runs: list[dict] = []
+        self.tables_written: list[str] = []
 
     def add_table(self, name: str, frame: pd.DataFrame) -> str:
         self.frames[f"{self.database}.{name}"] = frame.reset_index(drop=True)
@@ -114,9 +115,12 @@ class FakeStore:
 
     def save_forecast(self, issued: IssuedForecast, dataset: DatasetRecord) -> None:
         values = issued.values.copy()
-        for column in dataset.dimension_columns:
-            values[column] = values[column].astype(str) if column in values.columns else None
-        self.saved_values.append(values.assign(dataset=dataset.dataset))
+        for column in issued.record.dimension_columns:
+            values[column] = values[column].astype(str)
+        self.tables_written.append(
+            forecast_table(issued.record.dataset, issued.record.forecast_name, issued.record.kind)
+        )
+        self.saved_values.append(values)
         self.saved_forecasts.append(issued.record)
 
     def forecasts(self, dataset=None, forecast_name=None, kind: Kind | None = None) -> list:
@@ -128,18 +132,17 @@ class FakeStore:
             and (kind is None or record.kind is kind)
         ]
 
-    def forecast_values(self, dataset: str, forecast_ids) -> pd.DataFrame:
-        stored = pd.concat(self.saved_values, ignore_index=True)
-        chosen = stored[
-            (stored["dataset"] == dataset) & stored["forecast_id"].isin(list(forecast_ids))
-        ]
-        return chosen.drop(columns="dataset").reset_index(drop=True)
+    def forecast_values(self, records) -> pd.DataFrame:
+        wanted = {record.forecast_id for record in records}
+        chosen = [v for v in self.saved_values if v["forecast_id"].iloc[0] in wanted]
+        return pd.concat(chosen, ignore_index=True).reset_index(drop=True)
 
-    def forecast_sizes(self, dataset: str) -> dict[str, int]:
+    def forecast_sizes(self, records) -> dict[str, int]:
+        wanted = {record.forecast_id for record in records}
         return {
             values["forecast_id"].iloc[0]: values["ts_id"].nunique()
             for values in self.saved_values
-            if values["dataset"].iloc[0] == dataset
+            if values["forecast_id"].iloc[0] in wanted
         }
 
     def create_table_from_frame(self, table: str, frame: pd.DataFrame) -> str:

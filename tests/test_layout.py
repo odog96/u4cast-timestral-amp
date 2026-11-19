@@ -12,6 +12,7 @@ from u4cast.layout import (
     DatasetRecord,
     ForecastRecord,
     Kind,
+    forecast_table,
     forecast_values_columns,
     forecast_values_table,
     values_table_schema,
@@ -92,6 +93,19 @@ def test_each_dataset_has_its_own_forecast_values_table():
     assert forecast_values_table("  Sales 2026 (v2)! ") == "forecast_values_sales_2026_v2"
     with pytest.raises(ValueError, match="no letter or digit"):
         forecast_values_table("???")
+
+
+def test_each_forecast_has_its_own_table_and_test_runs_a_second_one():
+    assert forecast_table("Iowa sales", "Polk vodka") == "forecast_values_iowa_sales__polk_vodka"
+    assert (
+        forecast_table("Iowa sales", "Polk vodka", Kind.BACKTEST)
+        == "forecast_values_iowa_sales__polk_vodka__test_runs"
+    )
+    assert forecast_table("Iowa sales", "Polk vodka", Kind.FORECAST) == forecast_table(
+        "Iowa sales", "Polk vodka"
+    )
+    with pytest.raises(ValueError, match="no letter or digit"):
+        forecast_table("Iowa sales", "!!!")
 
 
 def test_dimension_columns_are_stored_as_text():

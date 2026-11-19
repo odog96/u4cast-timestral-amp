@@ -35,6 +35,7 @@ from u4cast.layout import (
     DatasetRecord,
     ForecastRecord,
     Kind,
+    forecast_table,
     forecast_values_columns,
     forecast_values_table,
 )
@@ -263,9 +264,7 @@ class Workspace:
             store.create_tables()
             datasets = {record.dataset: record for record in store.datasets()}
             forecasts = store.forecasts()
-            sizes: dict[str, int] = {}
-            for name in {record.dataset for record in forecasts}:
-                sizes.update(store.forecast_sizes(name))
+            sizes = store.forecast_sizes(forecasts)
             with self._lock:
                 self._store, self._datasets, self._forecasts, self._sizes = (
                     store,
@@ -446,7 +445,7 @@ class Workspace:
             "minimum_history": minimum_history(record.frequency),
             "minimum_history_floor": min(minimum_history(record.frequency), 32),
             "forecast_groups": self.forecast_groups(name),
-            "values_table": f"{self.store.database}.{forecast_values_table(name)}",
+            "values_table": f"{self.store.database}.{forecast_values_table(name)}__<forecast>",
         }
 
     def history(self, name: str, target: str | None = None) -> dict[str, Any]:
@@ -802,8 +801,7 @@ class Workspace:
             forecasts = self.store.forecasts()
             known = {record.forecast_id for record in self._forecasts}
             new = [record for record in forecasts if record.forecast_id not in known]
-            for dataset in {record.dataset for record in new}:
-                self._sizes.update(self.store.forecast_sizes(dataset))
+            self._sizes.update(self.store.forecast_sizes(new))
             self._forecasts.extend(new)
             self._schedules = {(s.dataset, s.forecast_name): s for s in self.store.schedules()}
             self._stored_read = time.monotonic()
@@ -1092,7 +1090,7 @@ class Workspace:
             "backtests": [self._record_json(b) for b in self._issues(dataset, name, Kind.BACKTEST)],
             "reissue_dates": [iso(day) for day in open_dates],
             "latest_data_date": iso(dates[-1]) if len(dates) else None,
-            "values_table": f"{self.store.database}.{forecast_values_table(dataset)}",
+            "values_table": f"{self.store.database}.{forecast_table(dataset, name)}",
             "forecasts_table": f"{self.store.database}.forecasts",
         }
 
@@ -1101,7 +1099,7 @@ class Workspace:
         cached = self._values.get(record.forecast_id)
         if cached is None:
             with self._lock:
-                cached = self.store.forecast_values(record.dataset, [record.forecast_id])
+                cached = self.store.forecast_values([record])
             cached = cached.sort_values([TS_ID, "step"], ignore_index=True)
             self._values.put(record.forecast_id, cached)
             self._sizes[record.forecast_id] = cached[TS_ID].nunique()
@@ -1128,16 +1126,15 @@ class Workspace:
             self.store.save_forecast(issued, dataset)
             self._forecasts.append(issued.record)
             self._sizes[issued.record.forecast_id] = len(issued.rows)
+        made_by = issued.record.dimension_columns
         values = issued.values.copy()
-        for column in dataset.dimension_columns:
+        for column in made_by:
             values[column] = (
                 values[column].astype("string").astype(object).where(values[column].notna(), None)
-                if column in values.columns
-                else None
             )
         values["date"] = pd.to_datetime(values["date"])
         # The same columns in the same order as the stored table.
-        values = values[list(forecast_values_columns(dataset.dimension_columns))]
+        values = values[list(forecast_values_columns(made_by))]
         self._values.put(issued.record.forecast_id, values)
 
     def _with_progress(
@@ -1200,6 +1197,23 @@ class Workspace:
             raise UserError(
                 f"A forecast named {name} exists for this dataset. Open it to reissue it, "
                 "or choose another name."
+            )
+        try:
+            table = forecast_table(dataset, name)
+        except ValueError as error:
+            raise UserError(str(error)) from error
+        clash = next(
+            (
+                r.forecast_name
+                for r in self._forecasts
+                if r.dataset == dataset and forecast_table(dataset, r.forecast_name) == table
+            ),
+            None,
+        )
+        if clash:
+            raise UserError(
+                f"The name {name} is too close to the forecast {clash}: both would be stored "
+                f"in the table {table}. Choose another name."
             )
         if not 1 <= horizon <= 1024:
             raise UserError("The horizon must be between 1 and 1,024 periods.")
@@ -1611,7 +1625,8 @@ class Workspace:
         """Return the first rows of a forecast as stored, and where they are stored."""
         record = self.record(forecast_id)
         values = self.values(record)
-        table = f"{self.store.database}.{forecast_values_table(record.dataset)}"
+        name = forecast_table(record.dataset, record.forecast_name, record.kind)
+        table = f"{self.store.database}.{name}"
         return {
             "table": table,
             "forecasts_table": f"{self.store.database}.forecasts",

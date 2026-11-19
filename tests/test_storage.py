@@ -204,7 +204,7 @@ def test_a_forecast_is_stored_and_read_back_unchanged(store, dataset):
     assert (record.horizon, record.kind, record.model_name) == (12, Kind.FORECAST, "stand-in")
     assert record.fill is Fill.MISSING
 
-    values = store.forecast_values(dataset.dataset, [record.forecast_id])
+    values = store.forecast_values([record])
     expected = issued.values.sort_values(["ts_id", "step"], ignore_index=True)
     assert len(values) == 6 * 12
     assert values.columns.tolist() == expected.columns.tolist()
@@ -226,7 +226,7 @@ def test_reissues_and_coarser_forecasts_are_appended_never_overwritten(store, da
         target_column="units",
     )
     store.save_forecast(first, dataset)
-    before = store.forecast_values(dataset.dataset, [first.record.forecast_id])
+    before = store.forecast_values([first.record])
 
     second = reissue_forecast(
         first.record,
@@ -240,14 +240,16 @@ def test_reissues_and_coarser_forecasts_are_appended_never_overwritten(store, da
         dt.date(2025, 11, 1),
         dt.date(2025, 10, 1),
     ]
-    after = store.forecast_values(dataset.dataset, [first.record.forecast_id])
+    after = store.forecast_values([first.record])
     pd.testing.assert_frame_equal(before, after)
-    both = store.forecast_values(
-        dataset.dataset, [first.record.forecast_id, second.record.forecast_id]
-    )
+    both = store.forecast_values([first.record, second.record])
     assert len(both) == 2 * 3 * 6
-    # Summed up to SKU: the store column of the dataset is left empty.
-    assert both["store"].isna().all()
+    # The forecast is by SKU, so its table has no store column.
+    assert "store" not in both.columns
+    assert store.forecast_sizes([first.record, second.record]) == {
+        first.record.forecast_id: 3,
+        second.record.forecast_id: 3,
+    }
     january = both[(both["date"] == pd.Timestamp("2026-01-01")) & (both["ts_id"] == "sku=B")]
     assert sorted(january["step"]) == [2, 3]
 

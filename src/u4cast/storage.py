@@ -33,7 +33,7 @@ from u4cast.layout import (
     DatasetRecord,
     ForecastRecord,
     Kind,
-    forecast_values_table,
+    forecast_table,
     values_table_schema,
 )
 from u4cast.prepare import TS_ID
@@ -329,22 +329,21 @@ class Store:
     # Forecasts
 
     def save_forecast(self, issued: IssuedForecast, dataset: DatasetRecord) -> None:
-        """Append a forecast: its values first, then its row in the forecasts table.
+        """Append a run of a forecast: its values first, then its row in the forecasts table.
 
-        The values table has all the dimension columns of the dataset, as
-        text. A forecast summed up to fewer columns leaves the others empty.
+        Every forecast has its own values table, with the dimension columns
+        that forecast is made by, as text. Each run of it is appended there.
         """
-        table = forecast_values_table(dataset.dataset)
-        columns = values_table_schema(dataset.dimension_columns)
+        record = issued.record
+        table = forecast_table(record.dataset, record.forecast_name, record.kind)
+        columns = values_table_schema(record.dimension_columns)
         self.ensure_table(table, columns)
         values = issued.values.copy()
-        for name in dataset.dimension_columns:
-            if name in values.columns:
-                values[name] = (
-                    values[name].astype("string").astype(object).where(values[name].notna(), None)
-                )
-            else:
-                values[name] = None
+        for name in record.dimension_columns:
+            values[name] = (
+                values[name].astype("string").astype(object).where(values[name].notna(), None)
+            )
+        values = values[[name for name, _ in columns]]
         values["date"] = pd.to_datetime(values["date"]).dt.date
         values["step"] = values["step"].astype("int32")
         self._append(table, values, columns)
@@ -378,27 +377,40 @@ class Store:
             records, key=lambda record: (record.history_end_date, record.created_at), reverse=True
         )
 
-    def forecast_sizes(self, dataset: str) -> dict[str, int]:
-        """Return how many series each stored forecast of a dataset has."""
+    def _tables_of(self, records: Sequence[ForecastRecord]) -> dict[str, list[str]]:
+        """Group runs by the table their values are in."""
+        tables: dict[str, list[str]] = {}
+        for record in records:
+            table = forecast_table(record.dataset, record.forecast_name, record.kind)
+            tables.setdefault(table, []).append(record.forecast_id)
+        return tables
+
+    def forecast_sizes(self, records: Sequence[ForecastRecord]) -> dict[str, int]:
+        """Return how many series each of the given runs has."""
         from pyspark.sql import functions as fn
 
-        table = forecast_values_table(dataset)
-        if not self.spark.catalog.tableExists(f"{self.database}.{table}"):
-            return {}
-        rows = (
-            self.spark.table(_table(self.database, table))
-            .groupBy("forecast_id")
-            .agg(fn.countDistinct(TS_ID))
-            .collect()
-        )
-        return {row[0]: int(row[1]) for row in rows}
+        sizes: dict[str, int] = {}
+        for table in self._tables_of(records):
+            if not self.spark.catalog.tableExists(f"{self.database}.{table}"):
+                continue
+            rows = (
+                self.spark.table(_table(self.database, table))
+                .groupBy("forecast_id")
+                .agg(fn.countDistinct(TS_ID))
+                .collect()
+            )
+            sizes.update({row[0]: int(row[1]) for row in rows})
+        return sizes
 
-    def forecast_values(self, dataset: str, forecast_ids: Sequence[str]) -> pd.DataFrame:
-        """Return the stored values of the given forecasts of a dataset."""
+    def forecast_values(self, records: Sequence[ForecastRecord]) -> pd.DataFrame:
+        """Return the stored values of the given runs, which share their columns."""
         from pyspark.sql import functions as fn
 
-        frame = self.spark.table(_table(self.database, forecast_values_table(dataset)))
-        result = frame.where(fn.col("forecast_id").isin(list(forecast_ids))).toPandas()
+        parts = []
+        for table, forecast_ids in self._tables_of(records).items():
+            frame = self.spark.table(_table(self.database, table))
+            parts.append(frame.where(fn.col("forecast_id").isin(forecast_ids)).toPandas())
+        result = pd.concat(parts, ignore_index=True)
         result["date"] = pd.to_datetime(result["date"])
         return result.sort_values(["forecast_id", TS_ID, "step"], ignore_index=True)
 

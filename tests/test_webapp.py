@@ -165,7 +165,7 @@ def test_a_dataset_is_saved_once_and_then_listed(client):
     assert len(overview["dates"]) == 40
     assert overview["minimum_history"] == 24
     assert overview["forecast_groups"] == []
-    assert overview["values_table"] == "fake.forecast_values_sales"
+    assert overview["values_table"] == "fake.forecast_values_sales__<forecast>"
     assert client.get("/api/datasets/Sales/dimensions/sku").json() == SKUS
     assert client.get("/api/datasets/Other").status_code == 400
 
@@ -370,7 +370,7 @@ def test_stored_rows_and_the_csv_download(client):
     add_dataset(client)
     forecast_id = new_forecast(client, cutoffs=0)["forecast_id"]
     stored = client.get(f"/api/forecasts/{forecast_id}/rows", params={"limit": 3}).json()
-    assert stored["table"] == "fake.forecast_values_sales"
+    assert stored["table"] == "fake.forecast_values_sales__monthly_demand"
     assert stored["rows"] == 36
     assert len(stored["preview"]) == 3
     assert stored["columns"] == [
@@ -781,3 +781,38 @@ def test_an_issue_written_by_a_job_is_found(client, store, monkeypatch):
     overview = client.get("/api/datasets/Sales/forecasts/Monthly demand").json()
     ends = [issue["history_end_date"] for issue in overview["issues"]]
     assert ends == ["2025-04-01", "2024-12-01"]
+
+
+def test_every_forecast_has_its_own_table(client, store):
+    add_dataset(client)
+    new_forecast(client)  # by county and SKU, with two test runs
+    new_forecast(client, forecast_name="By SKU", dimension_columns=["sku"], cutoffs=0)
+    assert store.tables_written == [
+        "forecast_values_sales__monthly_demand",
+        "forecast_values_sales__monthly_demand__test_runs",
+        "forecast_values_sales__monthly_demand__test_runs",
+        "forecast_values_sales__by_sku",
+    ]
+    overview = client.get("/api/datasets/Sales/forecasts/By SKU").json()
+    assert overview["values_table"] == "fake.forecast_values_sales__by_sku"
+    rows = client.get(f"/api/forecasts/{overview['issues'][0]['forecast_id']}/rows").json()
+    # The table has only the columns this forecast is made by: no county.
+    assert rows["columns"] == [
+        "forecast_id",
+        "ts_id",
+        "sku",
+        "date",
+        "forecast",
+        "low",
+        "high",
+        "step",
+    ]
+    assert rows["table"] == "fake.forecast_values_sales__by_sku"
+
+    # A name that would land in the same table as another forecast is refused.
+    close = client.post(
+        "/api/datasets/Sales/forecasts",
+        json={"forecast_name": "by-sku", "dimension_columns": ["sku"]},
+    )
+    assert close.status_code == 400
+    assert "too close" in close.json()["detail"]
