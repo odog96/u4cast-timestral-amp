@@ -84,6 +84,24 @@ export interface ForecastRecord {
   series: number | null;
 }
 
+export interface Cleanup {
+  forecasts: {
+    dataset: string;
+    forecast_name: string;
+    tables: string[];
+    runs: number;
+    test_runs: number;
+    rows: number;
+    bytes: number;
+    first_run: string;
+    last_run: string;
+  }[];
+  tables: number;
+  bytes: number;
+  oldest: string | null;
+  in_production: number;
+}
+
 export interface ProductionSchedule {
   cron: string;
   state: "active" | "paused";
@@ -338,6 +356,9 @@ export const api = {
     post<Job>(`/api/datasets/${e(name)}/forecasts`, body),
   forecast: (dataset: string, name: string) =>
     get<ForecastOverview>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}`),
+  cleanup: () => get<Cleanup>("/api/cleanup"),
+  deleteForecast: (dataset: string, name: string) =>
+    request<Cleanup>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}`, { method: "DELETE" }),
   production: (dataset: string, name: string) =>
     get<Production>(`/api/datasets/${e(dataset)}/forecasts/${e(name)}/production`),
   promote: (dataset: string, name: string, cron: string) =>

@@ -6,6 +6,7 @@ import { Crumb, CrumbProvider, Crumbs, Icon } from "./components/ui";
 import { modelName } from "./format";
 import { AddDataset } from "./pages/AddDataset";
 import { DatasetForecasts, DatasetPage } from "./pages/Dataset";
+import { CleanupPage } from "./pages/Cleanup";
 import { Datasets } from "./pages/Datasets";
 import { ForecastPage } from "./pages/Forecast";
 import { NewForecast } from "./pages/NewForecast";
@@ -72,6 +73,11 @@ export function App() {
           </Link>
           <Crumbs crumbs={crumbs} />
           <div className="topbar-right">
+            {state === "ready" && (
+              <Link to="/cleanup" className="muted" style={{ marginRight: 14 }}>
+                Clean up
+              </Link>
+            )}
             {status.data && state === "ready" && (
               <span title={`Forecasts are made by ${status.data.model}`}>
                 {modelName(status.data.model)} · {status.data.database}
@@ -92,6 +98,7 @@ export function App() {
       {state === "ready" ? (
         <Routes>
           <Route path="/" element={<Datasets />} />
+          <Route path="/cleanup" element={<CleanupPage />} />
           <Route path="/datasets/new" element={<AddDataset />} />
           <Route path="/datasets/:dataset" element={<DatasetPage />} />
           <Route path="/datasets/:dataset/forecasts" element={<DatasetForecasts />} />

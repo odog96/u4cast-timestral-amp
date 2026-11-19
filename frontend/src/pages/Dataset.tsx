@@ -76,7 +76,7 @@ export function DatasetPage() {
                   : "No dates"
               }
             />
-            <Tile label="Forecasts" value={dataset.forecast_groups.length} note={`${dataset.issues} issues stored`} />
+            <Tile label="Forecasts" value={dataset.forecast_groups.length} note={`${dataset.issues} runs stored`} />
           </div>
         </section>
 
@@ -224,7 +224,7 @@ export function DatasetForecasts() {
           <div className="card-head">
             <div>
               <h2>Forecasts</h2>
-              <div className="sub">Each forecast keeps every issue made of it. Open one to explore it.</div>
+              <div className="sub">Each forecast keeps every run made of it, in its own table. Open one to explore it.</div>
             </div>
           </div>
           {dataset.forecast_groups.length === 0 ? (
@@ -246,9 +246,9 @@ export function DatasetForecasts() {
                     <th>History to</th>
                     <th className="r">Series</th>
                     <th className="r">Ahead</th>
-                    <th className="r">Issues</th>
+                    <th className="r">Runs</th>
                     <th>Accuracy</th>
-                    <th>Last issued</th>
+                    <th>Last run</th>
                   </tr>
                 </thead>
                 <tbody>

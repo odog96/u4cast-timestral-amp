@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { ErrorNote, Icon, Loading, useCrumbs } from "../components/ui";
 import { FREQUENCY_NAMES } from "../format";
+import { age, size } from "./Cleanup";
 
 export function Datasets() {
   useCrumbs([]);
@@ -108,6 +109,21 @@ export function Datasets() {
           </div>
         )}
       </section>
+      <CleanupNote />
     </main>
+  );
+}
+
+/** A quiet line under the datasets: how many forecast tables there are, and where to clean up. */
+function CleanupNote() {
+  const cleanup = useQuery({ queryKey: ["cleanup"], queryFn: api.cleanup });
+  const data = cleanup.data;
+  if (!data || data.tables === 0 || !data.oldest) return null;
+  return (
+    <p className="sub" style={{ marginTop: 16, fontSize: 13 }}>
+      You have {data.tables} forecast table{data.tables === 1 ? "" : "s"} that are not in
+      production, {size(data.bytes)} in all, the oldest last run {age(data.oldest)} ago.{" "}
+      <Link to="/cleanup">Clean up</Link>
+    </p>
   );
 }

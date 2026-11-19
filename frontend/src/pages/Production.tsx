@@ -27,7 +27,7 @@ const PRESETS: Record<Frequency, Preset[]> = {
 };
 
 const OUTCOMES: Record<string, string> = {
-  issued: "Issued",
+  issued: "Ran",
   no_new_data: "No new data",
   failed: "Failed",
 };
@@ -93,14 +93,14 @@ export function ProductionTab({
           <div>
             <h2>
               {schedule ? "In production" : "Put this forecast in production"}
-              <Hint text="In production, a Cloudera AI job issues this forecast again on a schedule, from the history as it stands that day. Every run is a new issue in the same forecast table. If no new history has arrived, the run makes nothing and says so." />
+              <Hint text="In production, a Cloudera AI job runs this forecast again on a schedule, from the history as it stands that day. Every run is added to this forecast's own table, with its own identifier. If no new history has arrived, the run makes nothing and says so." />
             </h2>
             <div className="sub">
               {schedule
                 ? `${label ?? `On the schedule ${schedule.cron}`} (UTC), since ${when(schedule.since)}. ${
                     schedule.state === "paused" ? "Paused: it does not run until it is started again." : ""
                   }`
-                : "A job then issues it again on a schedule, with the latest data, without anyone clicking."}
+                : "A job then runs it again on a schedule, with the latest data, without anyone clicking."}
             </div>
           </div>
           {schedule && (
@@ -119,7 +119,7 @@ export function ProductionTab({
                 className="btn"
                 disabled={setState.isPending}
                 onClick={() => {
-                  if (window.confirm("Take this forecast out of production? Its issues and its record stay."))
+                  if (window.confirm("Take this forecast out of production? Its runs and its record stay."))
                     setState.mutate("retired");
                 }}
               >
@@ -206,8 +206,8 @@ export function ProductionTab({
             value={pct(track.total.wape)}
             note={
               track.scored_issues
-                ? `Over ${track.scored_issues} issue${track.scored_issues === 1 ? "" : "s"} that have actuals`
-                : "No issue has actuals yet"
+                ? `Over ${track.scored_issues} run${track.scored_issues === 1 ? "" : "s"} that have actuals`
+                : "No run has actuals yet"
             }
           />
           <Tile
@@ -215,9 +215,9 @@ export function ProductionTab({
             value={pct(track.total.reference_wape)}
             note="The same dates, the simplest alternative"
           />
-          <Tile label="Issues" value={track.issues.length} note="Every run that found new data" />
+          <Tile label="Runs with a forecast" value={track.issues.length} note="Every run that found new data" />
           <Tile
-            label="Runs"
+            label="Scheduled runs"
             value={data.runs.length}
             note={data.runs.length ? `Last: ${OUTCOMES[data.runs[0].outcome] ?? data.runs[0].outcome}` : "None yet"}
           />
@@ -229,7 +229,7 @@ export function ProductionTab({
           <div>
             <h2>Track record</h2>
             <div className="sub">
-              Each issue, scored on the dates it predicted that now have an actual. This is real use,
+              Each run, scored on the dates it predicted that now have an actual. This is real use,
               not a test on the past.
             </div>
           </div>
@@ -239,7 +239,7 @@ export function ProductionTab({
             <thead>
               <tr>
                 <th>History to</th>
-                <th>Issued</th>
+                <th>Ran</th>
                 <th className="r">Dates with actuals</th>
                 <th className="r">Error</th>
                 <th className="r">Repeating last year</th>

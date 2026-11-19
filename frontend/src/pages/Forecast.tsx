@@ -1,4 +1,4 @@
-// Explore a forecast: its chart, its issues side by side, its accuracy, and its stored rows.
+// Explore a forecast: its chart, its runs side by side, its accuracy, and its stored rows.
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
@@ -102,7 +102,7 @@ function Explore({ overview }: { overview: ForecastOverview }) {
           <select
             className="select"
             style={{ width: "auto" }}
-            aria-label="Which issue to show"
+            aria-label="Which run to show"
             value={issue.forecast_id}
             onChange={(event) => update({ issue: event.target.value })}
           >
@@ -115,7 +115,7 @@ function Explore({ overview }: { overview: ForecastOverview }) {
           </select>
           <button className="btn" onClick={() => setReissuing(!reissuing)}>
             <Icon name="refresh" />
-            Reissue
+            Run again
           </button>
           <a className="btn" href={api.downloadUrl(issue.forecast_id)}>
             <Icon name="download" />
@@ -139,7 +139,7 @@ function Explore({ overview }: { overview: ForecastOverview }) {
         {(
           [
             ["forecast", "Forecast", null],
-            ["compare", "Issues compared", overview.issues.length],
+            ["compare", "Runs compared", overview.issues.length],
             ["accuracy", "Accuracy", null],
             ["stored", "Stored rows", null],
             ["production", "Production", null],
@@ -200,9 +200,9 @@ function Reissue({
     <section className="card card-pad" style={{ marginBottom: 20 }}>
       <div className="spread" style={{ alignItems: "flex-start" }}>
         <div>
-          <h2>Reissue this forecast</h2>
+          <h2>Run this forecast again</h2>
           <p className="muted" style={{ marginTop: 4, maxWidth: "68ch" }}>
-            The same series are forecast again from a later end of history. The new issue gets its
+            The same series are forecast again from a later end of history. The new run gets its
             own identifier and is stored next to the earlier ones. Nothing is overwritten.
           </p>
         </div>
@@ -215,7 +215,7 @@ function Reissue({
           <JobProgress job={job} onDone={done} onDismiss={() => setJob(null)} />
         ) : dates.length === 0 ? (
           <div className="notice">
-            Every date of the history has an issue already. There is nothing newer to reissue with.
+            Every date of the history has a run already. There is no newer data to run it with.
           </div>
         ) : (
           <div className="row wrap" style={{ alignItems: "flex-end", gap: 12 }}>
@@ -237,7 +237,7 @@ function Reissue({
               </select>
             </div>
             <button className="btn primary" onClick={() => start.mutate()} disabled={start.isPending}>
-              Reissue
+              Run again
               <Icon name="arrow" />
             </button>
           </div>
@@ -353,7 +353,7 @@ function ForecastTab({
           <Tile
             label="Since then"
             value={happened ? periods(happened, frequency) : "–"}
-            note={happened ? "Have actuals to compare with" : "No actuals yet after this issue"}
+            note={happened ? "Have actuals to compare with" : "No actuals yet after this run"}
           />
         </div>
       </section>
@@ -557,7 +557,7 @@ function SeriesTable({
   );
 }
 
-// Several issues of one forecast, next to what happened.
+// Several runs of one forecast, next to what happened.
 
 function Comparison({
   overview,
@@ -582,7 +582,7 @@ function Comparison({
   if (!compared.data) {
     return (
       <section className="card">
-        <Loading what="Lining up the issues" />
+        <Loading what="Lining up the runs" />
       </section>
     );
   }
@@ -625,7 +625,7 @@ function Comparison({
           <div>
             <h2>The same dates, side by side</h2>
             <div className="sub">
-              What each {kind === "forecast" ? "issue" : "past forecast"} said for a date, and what
+              What each {kind === "forecast" ? "run" : "test run"} said for a date, and what
               then happened.
             </div>
           </div>
@@ -682,9 +682,9 @@ function CompareTab({
   if (overview.issues.length < 2) {
     return (
       <section className="card empty">
-        <h2>One issue so far</h2>
+        <h2>One run so far</h2>
         <p>
-          When this forecast is reissued, its issues overlap: several of them predict the same dates.
+          When this forecast is run again, its runs overlap: several of them predict the same dates.
           They are shown here side by side, next to what actually happened.
         </p>
       </section>
@@ -966,8 +966,8 @@ function StoredTab({ issue, frequency }: { issue: ForecastRecord; frequency: Fre
           <div>
             <h2>Stored in Iceberg</h2>
             <div className="sub">
-              This issue is {data.rows.toLocaleString()} rows appended to a table in the data lake.
-              Earlier issues are still there.
+              This run is {data.rows.toLocaleString()} rows appended to this forecast's table in the data lake.
+              Earlier runs are still there.
             </div>
           </div>
           <a className="btn" href={api.downloadUrl(issue.forecast_id)}>
@@ -1012,7 +1012,7 @@ function StoredTab({ issue, frequency }: { issue: ForecastRecord; frequency: Fre
         <div className="card-pad stack" style={{ gap: 12 }}>
           <pre className="code">{data.sql}</pre>
           <div className="spread">
-            <span className="hint">Every issue of this forecast, one row each:</span>
+            <span className="hint">Every run of this forecast, one row each:</span>
             <CopyButton text={data.record_sql} label="Copy SQL" />
           </div>
           <pre className="code">{data.record_sql}</pre>
