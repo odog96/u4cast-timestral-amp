@@ -12,6 +12,7 @@ import os
 import uvicorn
 
 from u4cast.connections import ClouderaCatalog
+from u4cast.production import ClouderaScheduler
 from u4cast.serving import forecaster_from_settings, model_choices
 from u4cast.storage import Store, spark_session
 from webapp.api import create_app
@@ -25,6 +26,7 @@ def main() -> None:
         forecaster_from_settings(),
         model_choices,
         lambda store: ClouderaCatalog(lambda statement: store.spark.sql(statement).collect()),
+        ClouderaScheduler(),
     )
     workspace.start()
     uvicorn.run(

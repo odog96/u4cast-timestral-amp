@@ -26,7 +26,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from u4cast.backtest import Scores, score_forecasts
+from u4cast.backtest import REFERENCE, Scores, score_forecasts
 from u4cast.connections import Catalog
 from u4cast.endpoint import BLOCK_STEPS
 from u4cast.forecast import IssuedForecast, issue_forecast, reissue_forecast
@@ -40,7 +40,22 @@ from u4cast.layout import (
 )
 from u4cast.model import Forecaster
 from u4cast.prepare import TS_ID, Fill, Panel, prepare
+from u4cast.production import (
+    ACTIVE,
+    DATASET_VARIABLE,
+    FAILED,
+    FORECAST_VARIABLE,
+    ISSUED,
+    NO_NEW_DATA,
+    PAUSED,
+    RETIRED,
+    Schedule,
+    Scheduler,
+    checked_cron,
+    job_name,
+)
 from u4cast.serving import ModelChoice
+from u4cast.storage import OWN_TABLES
 from webapp.jobs import Job
 
 logger = logging.getLogger(__name__)
@@ -53,7 +68,8 @@ MODELS_FRESH_SECONDS = 60
 MAX_DRILL_VALUES = 2_000
 WARM = 8
 BROWSE_FRESH_SECONDS = 300
-OWN_TABLES = ("forecasts", "datasets")
+STORED_FRESH_SECONDS = 20
+"""How long the lists of forecasts and schedules are trusted before Iceberg is asked again."""
 """How many forecasts are read ahead of time when the application starts."""
 """How long the dates of a history table are trusted before it is asked again for new rows."""
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
@@ -68,6 +84,10 @@ TARGET_HINTS = ("sales", "units", "qty", "quantity", "bottles", "amount", "volum
 
 class UserError(ValueError):
     """Something the user asked for cannot be done. The message is shown as it is."""
+
+
+class NoNewDataError(UserError):
+    """A forecast cannot be issued again because no history arrived since its last issue."""
 
 
 class NotReadyError(RuntimeError):
@@ -174,7 +194,11 @@ class Workspace:
         forecaster: Forecaster,
         choices: Callable[[], list[ModelChoice]] | None = None,
         catalog: Callable[[Any], Catalog] | None = None,
+        scheduler: Scheduler | None = None,
     ) -> None:
+        self.scheduler = scheduler
+        self._schedules: dict[tuple[str, str], Schedule] = {}
+        self._stored_read = 0.0
         self._connect = connect
         self._make_catalog = catalog
         self._catalog: Catalog | None = None
@@ -249,6 +273,8 @@ class Workspace:
                     forecasts,
                     sizes,
                 )
+                self._schedules = {(s.dataset, s.forecast_name): s for s in store.schedules()}
+                self._stored_read = time.monotonic()
                 self.state = "ready"
             logger.info("Connected: %d datasets, %d forecasts", len(datasets), len(forecasts))
         except Exception as error:
@@ -637,10 +663,12 @@ class Workspace:
 
     def panel(self, spec: SliceSpec) -> Panel:
         """Load and prepare the series of a slice. Kept in memory for the next use."""
+        record = self.dataset(spec.dataset)
+        # Asking for the dates first drops what was kept if the table has new rows.
+        self.dates(record)
         cached = self._panels.get(spec.key())
         if cached is not None:
             return cached
-        record = self.dataset(spec.dataset)
         unknown = [c for c in spec.dimension_columns if c not in record.dimension_columns]
         unknown += [c for c in spec.slice_filter if c not in record.dimension_columns]
         if unknown:
@@ -757,6 +785,231 @@ class Workspace:
         found = [last - i * step for i in range(max(0, cutoffs))]
         return sorted(k for k in found if k >= panel.minimum_history)
 
+    # Forecasts in production
+
+    def refresh(self) -> None:
+        """Read again what a scheduled job may have written: new issues, and the schedules.
+
+        A job in production appends its issue to Iceberg without telling the
+        application. So the lists the application keeps are read again when
+        they are older than a short while.
+        """
+        if time.monotonic() - self._stored_read < STORED_FRESH_SECONDS:
+            return
+        with self._lock:
+            if time.monotonic() - self._stored_read < STORED_FRESH_SECONDS:
+                return
+            forecasts = self.store.forecasts()
+            known = {record.forecast_id for record in self._forecasts}
+            new = [record for record in forecasts if record.forecast_id not in known]
+            for dataset in {record.dataset for record in new}:
+                self._sizes.update(self.store.forecast_sizes(dataset))
+            self._forecasts.extend(new)
+            self._schedules = {(s.dataset, s.forecast_name): s for s in self.store.schedules()}
+            self._stored_read = time.monotonic()
+        if new:
+            logger.info("Found %d forecasts written by a job", len(new))
+
+    def _schedule_json(self, schedule: Schedule | None) -> dict[str, Any] | None:
+        if schedule is None or schedule.state == RETIRED:
+            return None
+        return {
+            "cron": schedule.cron,
+            "state": schedule.state,
+            "job_name": schedule.job_name,
+            "jobs_address": self.scheduler.address(schedule.job_id) if self.scheduler else None,
+            "since": schedule.created_at.isoformat(),
+        }
+
+    def promote(self, dataset: str, name: str, cron: str) -> dict[str, Any]:
+        """Put a forecast in production: a job issues it again on the schedule `cron`."""
+        if self.scheduler is None:
+            raise UserError("Scheduling is not available here.")
+        self.dataset(dataset)
+        if not self._issues(dataset, name, Kind.FORECAST):
+            raise UserError(f"There is no forecast named {name} for {dataset}.")
+        try:
+            cron = checked_cron(cron)
+        except ValueError as error:
+            raise UserError(str(error)) from error
+        title = job_name(dataset, name)
+        with self._lock:
+            before = self._schedules.get((dataset, name))
+            if before and before.state != RETIRED:
+                self._drop_job(before)
+            job_id = self.scheduler.create(
+                title, cron, {DATASET_VARIABLE: dataset, FORECAST_VARIABLE: name}
+            )
+            now = dt.datetime.now(dt.UTC)
+            schedule = Schedule(dataset, name, cron, ACTIVE, job_id, title, now, now)
+            self.store.save_schedule(schedule)
+            self._schedules[(dataset, name)] = schedule
+        return self.production(dataset, name)
+
+    def _drop_job(self, schedule: Schedule) -> None:
+        try:
+            self.scheduler.delete(schedule.job_id)
+        except Exception:
+            logger.warning("Could not delete the job %s", schedule.job_name, exc_info=True)
+
+    def set_production_state(self, dataset: str, name: str, state: str) -> dict[str, Any]:
+        """Pause a forecast in production, start it again, or take it out of production.
+
+        Taking it out deletes the job. The issues it made, and the record of
+        its runs, stay.
+        """
+        if self.scheduler is None:
+            raise UserError("Scheduling is not available here.")
+        if state not in (ACTIVE, PAUSED, RETIRED):
+            raise UserError("A forecast in production is active, paused or retired.")
+        with self._lock:
+            schedule = self._schedules.get((dataset, name))
+            if schedule is None or schedule.state == RETIRED:
+                raise UserError(f"{name} is not in production.")
+            if state == RETIRED:
+                self._drop_job(schedule)
+            else:
+                self.scheduler.pause(schedule.job_id, state == PAUSED)
+            schedule = schedule.changed(state)
+            self.store.save_schedule(schedule)
+            self._schedules[(dataset, name)] = schedule
+        return self.production(dataset, name)
+
+    def run_scheduled(self, dataset: str, name: str) -> dict[str, Any]:
+        """Do one run of a forecast in production, and write down what it did.
+
+        This is what the job calls. It issues the forecast again from the
+        history as it stands. When no history has arrived since the last
+        issue it makes nothing and says so. It never switches model: if the
+        model the forecast was made with is not deployed, the run fails.
+        """
+        started = time.monotonic()
+        run: dict[str, Any] = {
+            "dataset": dataset,
+            "forecast_name": name,
+            "ran_at": dt.datetime.now(dt.UTC),
+            "forecast_id": None,
+            "history_end_date": None,
+            "series": None,
+        }
+        try:
+            issues = self._issues(dataset, name, Kind.FORECAST)
+            if not issues:
+                raise UserError(f"There is no forecast named {name} for {dataset}.")
+            wanted = issues[-1].model_name
+            if wanted not in {choice.model_name for choice in self.choices()}:
+                raise RuntimeError(
+                    f"The model {wanted} is not deployed. A forecast in production keeps its model."
+                )
+            result = self.reissue(Job(id="scheduled", label=name), dataset, name, None)
+            made = self.record(result["forecast_id"])
+            run |= {
+                "outcome": ISSUED,
+                "detail": f"Issued with history to {made.history_end_date}.",
+                "forecast_id": made.forecast_id,
+                "history_end_date": made.history_end_date,
+                "series": result["series"],
+            }
+        except NoNewDataError:
+            last = self._issues(dataset, name, Kind.FORECAST)[-1].history_end_date
+            run |= {
+                "outcome": NO_NEW_DATA,
+                "detail": f"No history after {last} has arrived. Nothing was issued.",
+                "history_end_date": last,
+            }
+        except Exception as error:
+            logger.exception("The scheduled run of %s failed", name)
+            run |= {"outcome": FAILED, "detail": str(error) or type(error).__name__}
+        run["seconds"] = round(time.monotonic() - started, 1)
+        with self._lock:
+            self.store.log_run(run)
+        return run
+
+    def track_record(self, dataset: str, name: str) -> dict[str, Any]:
+        """Score every issue of a forecast against the actuals that have arrived since.
+
+        This is the forecast's record in real use, not a test on the past:
+        each issue was made without knowing what came next. An issue is
+        scored on the dates it predicted that now have an actual.
+        """
+        issues = self._issues(dataset, name, Kind.FORECAST)
+        if not issues:
+            raise UserError(f"There is no forecast named {name} for {dataset}.")
+        latest = issues[-1]
+        key = (
+            "track|"
+            + ",".join(r.forecast_id for r in issues)
+            + f"|{self.dates(self.dataset(dataset))[-1]}"
+        )
+        scores = self._score_cache.get(key)
+        if scores is None:
+            panel = self._panel_of(latest)
+            scores = score_forecasts(panel, [(record, self.values(record)) for record in issues])
+            self._score_cache.put(key, scores)
+        scored = scores.scored[scores.scored["actual"].notna()]
+
+        def error(part: pd.DataFrame, column: str) -> float | None:
+            known = part[part[column].notna()]
+            total = known["actual"].abs().sum()
+            return float((known[column] - known["actual"]).abs().sum() / total) if total else None
+
+        rows = []
+        for record in issues:
+            mine = scored[scored["forecast_id"] == record.forecast_id]
+            rows.append(
+                {
+                    "forecast_id": record.forecast_id,
+                    "history_end_date": iso(record.history_end_date),
+                    "created_at": record.created_at.isoformat(),
+                    "horizon": record.horizon,
+                    "dates_scored": int(mine["date"].nunique()),
+                    "wape": error(mine, "forecast"),
+                    "reference_wape": error(mine, REFERENCE),
+                }
+            )
+        by_step = [
+            {
+                "step": int(step),
+                "issues": int(part["forecast_id"].nunique()),
+                "wape": error(part, "forecast"),
+                "reference_wape": error(part, REFERENCE),
+            }
+            for step, part in scored.groupby("step")
+        ]
+        return {
+            "target": latest.target_column,
+            "issues": rows,
+            "scored_issues": sum(1 for row in rows if row["dates_scored"]),
+            "total": {
+                "wape": error(scored, "forecast"),
+                "reference_wape": error(scored, REFERENCE),
+            },
+            "by_step": by_step,
+        }
+
+    def production(self, dataset: str, name: str) -> dict[str, Any]:
+        """Return everything about a forecast in production: schedule, runs and track record."""
+        self.dataset(dataset)
+        self.refresh()
+        with self._lock:
+            runs = self.store.runs(dataset, name, 50)
+        return {
+            "available": self.scheduler is not None,
+            "schedule": self._schedule_json(self._schedules.get((dataset, name))),
+            "runs": [
+                {
+                    "ran_at": _stamp(run["ran_at"]),
+                    "outcome": run["outcome"],
+                    "detail": run["detail"],
+                    "history_end_date": iso(run.get("history_end_date")),
+                    "series": None if pd.isna(run.get("series")) else int(run["series"]),
+                    "seconds": number(run.get("seconds")),
+                }
+                for run in runs
+            ],
+            "track": self.track_record(dataset, name),
+        }
+
     # Forecasts: lists
 
     def _issues(self, dataset: str, name: str, kind: Kind) -> list[ForecastRecord]:
@@ -768,6 +1021,7 @@ class Workspace:
         return [found[day] for day in sorted(found)]
 
     def forecast_groups(self, dataset: str) -> list[dict[str, Any]]:
+        self.refresh()
         names = sorted({r.forecast_name for r in self._forecasts if r.dataset == dataset})
         groups = []
         for name in names:
@@ -780,6 +1034,7 @@ class Workspace:
                     "forecast_name": name,
                     "issues": len(issues),
                     "backtests": len(self._issues(dataset, name, Kind.BACKTEST)),
+                    "production": self._schedule_json(self._schedules.get((dataset, name))),
                     "latest": self._record_json(latest),
                 }
             )
@@ -814,6 +1069,7 @@ class Workspace:
     def forecast_overview(self, dataset: str, name: str) -> dict[str, Any]:
         """Return a forecast by name: its issues, newest first, and what can be done next."""
         record = self.dataset(dataset)
+        self.refresh()
         issues = self._issues(dataset, name, Kind.FORECAST)
         if not issues:
             raise UserError(f"There is no forecast named {name} for {dataset}.")
@@ -1010,7 +1266,7 @@ class Workspace:
             raise UserError("No series has the minimum history by that date. Choose a later one.")
         ends = panel.dates[-1].date()
         if any(issue.history_end_date == ends for issue in issues):
-            raise UserError(
+            raise NoNewDataError(
                 f"This forecast was already issued with history to {ends}. "
                 "There is no newer data to reissue it with."
             )
@@ -1405,3 +1661,9 @@ def _search(table: pd.DataFrame, query: str) -> pd.DataFrame:
     for word in query.lower().split():
         table = table[table["search"].str.contains(word, regex=False)]
     return table
+
+
+def _stamp(value: dt.datetime) -> str:
+    """Write a time read from storage, which has no zone, as UTC."""
+    stamp = value.to_pydatetime() if hasattr(value, "to_pydatetime") else value
+    return (stamp if stamp.tzinfo else stamp.replace(tzinfo=dt.UTC)).isoformat()

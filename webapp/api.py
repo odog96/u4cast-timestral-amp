@@ -69,6 +69,14 @@ class ReissueRequest(BaseModel):
     as_of: str | None = None
 
 
+class PromoteRequest(BaseModel):
+    cron: str
+
+
+class StateRequest(BaseModel):
+    state: str
+
+
 class AccuracyRequest(BaseModel):
     cutoffs: int = 4
     cutoff_step: int = 1
@@ -221,6 +229,18 @@ def create_app(workspace: Workspace, front_end: Path = FRONT_END) -> FastAPI:
         name: str, forecast_name: str, q: str = "", limit: int = Query(100, ge=1, le=1000)
     ) -> dict[str, Any]:
         return workspace.accuracy(name, forecast_name, q, limit)
+
+    @app.get("/api/datasets/{name}/forecasts/{forecast_name}/production")
+    def production(name: str, forecast_name: str) -> dict[str, Any]:
+        return workspace.production(name, forecast_name)
+
+    @app.post("/api/datasets/{name}/forecasts/{forecast_name}/production")
+    def promote(name: str, forecast_name: str, body: PromoteRequest) -> dict[str, Any]:
+        return workspace.promote(name, forecast_name, body.cron)
+
+    @app.post("/api/datasets/{name}/forecasts/{forecast_name}/production/state")
+    def production_state(name: str, forecast_name: str, body: StateRequest) -> dict[str, Any]:
+        return workspace.set_production_state(name, forecast_name, body.state)
 
     @app.get("/api/datasets/{name}/forecasts/{forecast_name}/compare")
     def compare(

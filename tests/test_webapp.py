@@ -660,3 +660,124 @@ def test_only_a_deployed_workbench_model_counts():
 
     assert is_deployed(Client(), "p", "running")
     assert not is_deployed(Client(), "p", "stopped")
+
+
+class FakeScheduler:
+    """Remembers the jobs it was asked for."""
+
+    def __init__(self) -> None:
+        self.jobs: dict[str, dict] = {}
+
+    def create(self, name, cron, environment) -> str:
+        job_id = f"job-{len(self.jobs) + 1}"
+        self.jobs[job_id] = {"name": name, "cron": cron, "environment": dict(environment)}
+        self.jobs[job_id]["paused"] = False
+        return job_id
+
+    def pause(self, job_id, paused) -> None:
+        self.jobs[job_id]["paused"] = paused
+
+    def delete(self, job_id) -> None:
+        del self.jobs[job_id]
+
+    def address(self, job_id):
+        return "https://example.com/jobs"
+
+
+def test_a_forecast_is_put_in_production_and_runs_on_new_data(store, tmp_path, monkeypatch):
+    monkeypatch.setattr("webapp.workspace.DATES_FRESH_SECONDS", 0)
+    monkeypatch.setattr("webapp.workspace.STORED_FRESH_SECONDS", 0)
+    scheduler = FakeScheduler()
+    workspace = Workspace(lambda: store, StandInForecaster(), None, None, scheduler)
+    workspace.connect()
+    client = TestClient(create_app(workspace, front_end=tmp_path))
+    add_dataset(client)
+    new_forecast(client, cutoffs=0, history_end="2024-12-01")
+    address = "/api/datasets/Sales/forecasts/Monthly demand/production"
+
+    before = client.get(address).json()
+    assert before["available"]
+    assert before["schedule"] is None
+    assert before["runs"] == []
+    assert client.post(address, json={"cron": "every month"}).status_code == 400
+
+    promoted = client.post(address, json={"cron": "0 6 1 * *"}).json()
+    assert promoted["schedule"]["state"] == "active"
+    assert promoted["schedule"]["cron"] == "0 6 1 * *"
+    (job,) = scheduler.jobs.values()
+    assert job["environment"] == {
+        "U4CAST_PRODUCTION_DATASET": "Sales",
+        "U4CAST_PRODUCTION_FORECAST": "Monthly demand",
+    }
+    groups = client.get("/api/datasets/Sales").json()["forecast_groups"]
+    assert groups[0]["production"]["state"] == "active"
+
+    # The job runs: the history has months after the first issue, so it issues.
+    first = workspace.run_scheduled("Sales", "Monthly demand")
+    assert (first["outcome"], first["history_end_date"]) == ("issued", dt.date(2025, 4, 1))
+    # It runs again before any new month has arrived: nothing is issued.
+    late = workspace.run_scheduled("Sales", "Monthly demand")
+    assert late["outcome"] == "no_new_data"
+    assert len(store.saved_forecasts) == 2
+    # A month of sales arrives, and the next run issues from it.
+    more = sales()[lambda frame: frame["month"] == MONTHS[-1].date()].assign(
+        month=dt.date(2025, 5, 1)
+    )
+    store.frames["fake.sales"] = pd.concat([store.frames["fake.sales"], more], ignore_index=True)
+    third = workspace.run_scheduled("Sales", "Monthly demand")
+    assert (third["outcome"], third["history_end_date"]) == ("issued", dt.date(2025, 5, 1))
+
+    seen = client.get(address).json()
+    assert [run["outcome"] for run in seen["runs"]] == ["issued", "no_new_data", "issued"]
+    # The first issue, with history to December 2024, is scored on the five months since.
+    by_end = {issue["history_end_date"]: issue for issue in seen["track"]["issues"]}
+    assert by_end["2024-12-01"]["dates_scored"] == 5
+    assert by_end["2025-04-01"]["dates_scored"] == 1
+    assert by_end["2025-05-01"]["dates_scored"] == 0
+    assert seen["track"]["scored_issues"] == 2
+    assert seen["track"]["total"]["wape"] is not None
+    assert [row["step"] for row in seen["track"]["by_step"]] == [1, 2, 3, 4, 5]
+
+    paused = client.post(f"{address}/state", json={"state": "paused"}).json()
+    assert paused["schedule"]["state"] == "paused"
+    assert job["paused"]
+    client.post(f"{address}/state", json={"state": "active"})
+    assert not job["paused"]
+    retired = client.post(f"{address}/state", json={"state": "retired"}).json()
+    assert retired["schedule"] is None
+    assert scheduler.jobs == {}
+    assert len(retired["runs"]) == 3  # the record of its runs stays
+    assert client.post(f"{address}/state", json={"state": "paused"}).status_code == 400
+
+
+def test_a_production_run_fails_when_its_model_is_gone(store, tmp_path):
+    large, small = StandInForecaster(), StandInForecaster()
+    large.model_name, small.model_name = "mistralai/Timestral-209M", "mistralai/Timestral-28M"
+    choices = [
+        ModelChoice(key="timestral", forecaster=large, default=True),
+        ModelChoice(key="timestral-28m", forecaster=small),
+    ]
+    workspace = Workspace(lambda: store, large, lambda: choices, None, FakeScheduler())
+    workspace.connect()
+    client = TestClient(create_app(workspace, front_end=tmp_path))
+    add_dataset(client)
+    new_forecast(client, cutoffs=0, history_end="2024-12-01", model="timestral-28m")
+    choices.pop()  # the small model is taken down
+    workspace._choices_read = 0.0
+    run = workspace.run_scheduled("Sales", "Monthly demand")
+    assert run["outcome"] == "failed"
+    assert "not deployed" in run["detail"]
+    assert len(store.saved_forecasts) == 1
+
+
+def test_an_issue_written_by_a_job_is_found(client, store, monkeypatch):
+    monkeypatch.setattr("webapp.workspace.STORED_FRESH_SECONDS", 0)
+    add_dataset(client)
+    new_forecast(client, cutoffs=0, history_end="2024-12-01")
+    # Another process, the job, appends an issue to storage.
+    other = Workspace(lambda: store, StandInForecaster())
+    other.connect()
+    assert other.run_scheduled("Sales", "Monthly demand")["outcome"] == "issued"
+    overview = client.get("/api/datasets/Sales/forecasts/Monthly demand").json()
+    ends = [issue["history_end_date"] for issue in overview["issues"]]
+    assert ends == ["2025-04-01", "2024-12-01"]

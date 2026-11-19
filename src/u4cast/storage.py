@@ -37,6 +37,10 @@ from u4cast.layout import (
     values_table_schema,
 )
 from u4cast.prepare import TS_ID
+from u4cast.production import RUNS_TABLE, SCHEDULES_TABLE, Schedule
+
+OWN_TABLES = ("forecasts", "datasets", "schedules", "production_runs")
+"""The tables the application itself writes, next to one forecast values table per dataset."""
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, SparkSession
@@ -158,8 +162,45 @@ class Store:
     def create_tables(self) -> None:
         """Create the database and the forecasts and datasets tables, if they are missing."""
         self.spark.sql(f"create database if not exists {_quoted(self.database)}")
-        for table, columns in (("forecasts", FORECASTS_TABLE), ("datasets", DATASETS_TABLE)):
+        for table, columns in (
+            ("forecasts", FORECASTS_TABLE),
+            ("datasets", DATASETS_TABLE),
+            ("schedules", SCHEDULES_TABLE),
+            ("production_runs", RUNS_TABLE),
+        ):
             self.ensure_table(table, columns)
+
+    # Forecasts in production
+
+    def save_schedule(self, schedule: Schedule) -> None:
+        """Save the schedule of a forecast, in place of the one it had."""
+        self.spark.sql(
+            f"delete from {_table(self.database, 'schedules')} "
+            "where dataset = :dataset and forecast_name = :name",
+            args={"dataset": schedule.dataset, "name": schedule.forecast_name},
+        )
+        self._append("schedules", pd.DataFrame([schedule.to_row()]), SCHEDULES_TABLE)
+
+    def schedules(self) -> list[Schedule]:
+        rows = self.spark.table(_table(self.database, "schedules")).toPandas()
+        return [Schedule.from_row(row) for row in rows.to_dict("records")]
+
+    def log_run(self, run: Mapping[str, Any]) -> None:
+        """Append what one run of a schedule did."""
+        row = {name: run.get(name) for name, _ in RUNS_TABLE}
+        self._append("production_runs", pd.DataFrame([row]), RUNS_TABLE)
+
+    def runs(self, dataset: str, forecast_name: str, limit: int = 200) -> list[dict[str, Any]]:
+        """Return the runs of a schedule, newest first."""
+        from pyspark.sql import functions as fn
+
+        frame = (
+            self.spark.table(_table(self.database, "production_runs"))
+            .where((fn.col("dataset") == dataset) & (fn.col("forecast_name") == forecast_name))
+            .orderBy(fn.col("ran_at").desc())
+            .limit(limit)
+        )
+        return frame.toPandas().to_dict("records")
 
     def ensure_table(self, table: str, columns: Sequence[tuple[str, str]]) -> None:
         """Create a table if it is missing, and add any column it does not have yet.
@@ -373,7 +414,7 @@ class Store:
         return [
             f"{self.database}.{name}"
             for name in names
-            if name not in ("forecasts", "datasets") and not name.startswith("forecast_values_")
+            if name not in OWN_TABLES and not name.startswith("forecast_values_")
         ]
 
     def row_count(self, source_table: str) -> int:

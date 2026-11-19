@@ -23,6 +23,8 @@ class FakeStore:
         self.saved_forecasts: list[ForecastRecord] = []
         self.saved_values: list[pd.DataFrame] = []
         self.loads = 0
+        self.saved_schedules: dict = {}
+        self.saved_runs: list[dict] = []
 
     def add_table(self, name: str, frame: pd.DataFrame) -> str:
         self.frames[f"{self.database}.{name}"] = frame.reset_index(drop=True)
@@ -30,6 +32,23 @@ class FakeStore:
 
     def create_tables(self) -> None:
         pass
+
+    def save_schedule(self, schedule) -> None:
+        self.saved_schedules[(schedule.dataset, schedule.forecast_name)] = schedule
+
+    def schedules(self) -> list:
+        return list(self.saved_schedules.values())
+
+    def log_run(self, run) -> None:
+        self.saved_runs.append(dict(run))
+
+    def runs(self, dataset: str, forecast_name: str, limit: int = 200) -> list[dict]:
+        mine = [
+            r
+            for r in self.saved_runs
+            if (r["dataset"], r["forecast_name"]) == (dataset, forecast_name)
+        ]
+        return sorted(mine, key=lambda r: r["ran_at"], reverse=True)[:limit]
 
     def tables(self) -> list[str]:
         return sorted(self.frames)
